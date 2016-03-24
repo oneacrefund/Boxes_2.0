@@ -2,7 +2,7 @@
 # Author: Colin Custer (colin.custer@oneacrefund.org)
 # Description: A script to prep data for upload and storage on the Shiny server
 # Date created: 21 Mar 2016
-# Date modified: 21 Mar 2016
+# Date modified: 25 Mar 2016
 
 #### Set up ####
 
@@ -12,7 +12,7 @@ dd <- paste(wd, "raw", sep = "/")
 od <- paste(wd, "output", sep = "/")
 
 ## libraries ##
-libs <- c("rgdal", "rgeos", "raster", "tiff", "ggplot2", "dplyr")
+libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", "dplyr", "spatial.tools")
 lapply(libs, require, character.only = TRUE)
 rm(libs)
 cat("\014")
@@ -20,13 +20,30 @@ cat("\014")
 ### Load data for prepping ###
 
 ## Core Program Indicators ## 
-# # monthly rainfall data for 1901 - 2014 (rain_ts, ~50km res) (TO DO, see http://harvestchoice.org/tools/long-term-climate-trends-and-variations-sub-saharan-africa)
-# rain_ts_file <- paste(dd, "rainfall/time_series/CRU_pre_ts.dat", sep = "/")
-# rain_ts <- read.delim(rain_ts_file) 
+# # monthly rainfall data for 1901 - 2014 (rain_ts, ~50km res) 
+
+# import rain .csv files, convert to raster files, and write to disk
+rainpath <- paste(dd, "rainfall/time_series", sep = "/")
+rainlist <- list.files(rainpath, pattern = "*.csv", full.names = TRUE)
+r.files <- lapply(rainlist, read.table, sep = ",", header = FALSE, col.names = 
+                      c("y", seq(-18.2, by = 0.5, len = 141)), skip = 44)
+
+r.convert <- function(csv_file, r.crs = "+proj=longlat +datum=WGS84 +no_defs 
+                      +ellps=WGS84 +towgs84=0,0,0") {
+    long.csv <- gather(csv_file, x, pre, X.18.2:X51.8) %>% select(x, y, pre)
+    long.csv$x <- seq(-18.2, by = 0.5, len = 141) %>% rep(144) %>% sort()
+    long.csv$y <- seq(-33.8, by = 0.5, len = 144)
+    r.raster <- rasterFromXYZ(long.csv, crs = r.crs) 
+    r.raster[r.raster == -10000] <- NA
+    return(r.raster)
+}
+
+r.stack <- lapply(r.files, r.convert) %>% stack()
 
 # WorldPop population estimates for 2010 (pop, 1km res)
 pop <- raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif", 
-                    sep = "/")) 
+                    sep = "/"))
+# pop.tot <- cellStats(pop, sum, na.rm = TRUE) # 1,021,363,776
 
 # land area raster (land_area, for pop density and farm size, 1km res)
 land_area <- raster(paste(dd, "GRUMP/GL_AREAKM.tif", sep = "/"))
@@ -75,15 +92,52 @@ slp <- raster(paste(dd, "slope/slp.tif", sep = "/"))
 gs.l <- raster(paste(dd, "glp/lgp.tif", sep = "/"))
 
 #### data processing: core program indicators #### 
+## rural and urban population calculations ##
+################# Commented out until needed, time consuming to run 
+# 
+# GRUMP <- spatial_sync_raster(GRUMP, pop)
+# GRUMP.u <- GRUMP - 1
+# u.pop <- pop * GRUMP.u; cellStats(u.pop, sum, na.rm = TRUE)
+# r.pop <- pop - u.pop; cellStats(r.pop, sum, na.rm = TRUE)
+# 
+# r.pop.tot <- cellStats(r.pop, sum, na.rm = TRUE) # 682566645
+# u.pop.tot <- cellStats(u.pop, sum, na.rm = TRUE) # 335652563
+# 
+####################
 
-## population density calculation ##
-# TODO
 
 ## rainfall monthly mean ##
-# TODO
+## take stack of rainfall data, split into months, calculate mean, save to lists
+## to change the years for which we're calculating mean, change "yr" start & len
+yr <- seq.int(1, by = 12, len = nlayers(r.stack)/12)
+months <- c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", 
+            "oct", "nov", "dec")
 
-## rainfall volatility ##
-# TODO
+for (i in 0:11) {
+    if (i == 0) {
+        r.months <- list()
+        rm.months <- list()
+    }
+    mon <- stack(r.stack@layers[yr + i])
+    r.months <- c(r.months, mon)
+    rm.months <- c(rm.months, mean(mon))
+}
+
+names(r.months) <- months; names(rm.months) <- months
+
+## calc volatility of rainfall, write raster object to "output/rain_vol"
+r.vol <- function(r, rm) {
+    vol <- sum(r < rm*0.7) / sum(!is.na(r))
+    return(vol)
+}
+
+vol.stack <- mapply(r.vol, r.months, rm.months) %>% stack()
+
+writeRaster(vol.stack, paste(od, "rain_vol/rvol", sep = "/"), format = "GTiff",
+            bylayer = TRUE, suffix = "names", overwrite = TRUE)
+
+writeRaster(stack(rm.months), paste(od, "rain_m/rm", sep = "/"), format = "GTiff", 
+            bylayer = TRUE, suffix = "names", overwrite = TRUE)
 
 ## est. avg. farm size
 # TODO
