@@ -2,7 +2,7 @@
 # Author: Colin Custer (colin.custer@oneacrefund.org)
 # Description: A script to prep data for upload and storage on the Shiny server
 # Date created: 21 Mar 2016
-# Date modified: 25 Mar 2016
+# Date modified: 26 Mar 2016
 
 #### Set up ####
 
@@ -12,7 +12,8 @@ dd <- paste(wd, "raw", sep = "/")
 od <- paste(wd, "output", sep = "/")
 
 ## libraries ##
-libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", "dplyr", "spatial.tools")
+libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", 
+          "dplyr", "spatial.tools")
 lapply(libs, require, character.only = TRUE)
 rm(libs)
 cat("\014")
@@ -92,10 +93,20 @@ slp <- raster(paste(dd, "slope/slp.tif", sep = "/"))
 gs.l <- raster(paste(dd, "glp/lgp.tif", sep = "/"))
 
 #### data processing: core program indicators #### 
-## rural and urban population calculations ##
+## rural, peri-urban, and urban population calculations ##
+GRUMP <- spatial_sync_raster(GRUMP, pop, method = "ngb")
+vals <- unique(values(GRUMP))
+recl <- matrix(c(vals, NA, NA, 2), ncol = 2)
+GRUMP.u <- reclassify(GRUMP, rcl = recl)
+pu.des <- boundaries(GRUMP.u, directions = 4)
+u.des <- GRUMP.u-pu.des
+#add one to u.des s.t. r = 1, pu = 2, u = 3
+u.des <- u.des + 1
+rpu.des <- cover(u.des, GRUMP) # rural areas (NAs) remain 1s, p = 2 and u = 3
+writeRaster(rpu.des, paste(od, "rpu_designator.tif", sep = "/"))
+
 ################# Commented out until needed, time consuming to run 
 # 
-# GRUMP <- spatial_sync_raster(GRUMP, pop)
 # GRUMP.u <- GRUMP - 1
 # u.pop <- pop * GRUMP.u; cellStats(u.pop, sum, na.rm = TRUE)
 # r.pop <- pop - u.pop; cellStats(r.pop, sum, na.rm = TRUE)
@@ -122,6 +133,7 @@ for (i in 0:11) {
     r.months <- c(r.months, mon)
     rm.months <- c(rm.months, mean(mon))
 }
+rm(i)
 
 names(r.months) <- months; names(rm.months) <- months
 
