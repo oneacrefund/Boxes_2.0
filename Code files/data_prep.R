@@ -105,16 +105,6 @@ u.des <- u.des + 1
 rpu.des <- cover(u.des, GRUMP) # rural areas (NAs) remain 1s, p = 2 and u = 3
 writeRaster(rpu.des, paste(od, "rpu_designator.tif", sep = "/"))
 
-################# Commented out until needed, time consuming to run 
-# 
-# GRUMP.u <- GRUMP - 1
-# u.pop <- pop * GRUMP.u; cellStats(u.pop, sum, na.rm = TRUE)
-# r.pop <- pop - u.pop; cellStats(r.pop, sum, na.rm = TRUE)
-# 
-# r.pop.tot <- cellStats(r.pop, sum, na.rm = TRUE) # 682566645
-# u.pop.tot <- cellStats(u.pop, sum, na.rm = TRUE) # 335652563
-# 
-####################
 
 
 ## rainfall monthly mean ##
