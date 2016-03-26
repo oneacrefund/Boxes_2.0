@@ -20,6 +20,9 @@ cat("\014")
 
 ### Load data for prepping ###
 
+# Note: "Pop" is the canonical dataset for spatial questions, all rasters sync
+# to pop. 
+
 ## Core Program Indicators ## 
 # # monthly rainfall data for 1901 - 2014 (rain_ts, ~50km res) 
 
@@ -37,20 +40,28 @@ r.convert <- function(csv_file, r.crs = "+proj=longlat +datum=WGS84 +no_defs
     r.raster <- rasterFromXYZ(long.csv, crs = r.crs) 
     r.raster[r.raster == -10000] <- NA
     return(r.raster)
-}
+    }
 
 r.stack <- lapply(r.files, r.convert) %>% stack()
 
 # WorldPop population estimates for 2010 (pop, 1km res)
 pop <- raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif", 
                     sep = "/"))
+hhs <- pop / 6 # Divide population by 6 to get household counts
 # pop.tot <- cellStats(pop, sum, na.rm = TRUE) # 1,021,363,776
 
 # land area raster (land_area, for pop density and farm size, 1km res)
-land_area <- raster(paste(dd, "GRUMP/GL_AREAKM.tif", sep = "/"))
+land_area <- raster(paste(dd, "GRUMP/GL_AREAKM_Africa.tif", sep = "/"))
+land_area <- spatial_sync_raster(land_area, pop)
 
 # landcover data (lc, for farm size 300m res)
-lc <- raster(paste(dd, "landCover/ESA_GlobCover.tif", sep ="/"))
+if(!file.exists(paste(od, "lc_Africa.tif", sep = "?"))) {
+    lc.raw <- raster(paste(dd, "landCover/ESA_GlobCover.tif", sep ="/"))
+lc <- crop(lc.raw, pop, filename = paste(od, "lc_Africa.tif", sep = "/"), 
+           overwrite = TRUE)
+} else {
+    lc <- raster(paste(od, "lc_Africa.tif", sep = "/"))
+}
 
 # urban extent data (GRUMP, 1km res)
 GRUMP.raw <- readGDAL(paste(dd,"GRUMP/afurextents.bil", sep = "/"))
@@ -142,4 +153,45 @@ writeRaster(stack(rm.months), paste(od, "rain_m/rm", sep = "/"), format = "GTiff
             bylayer = TRUE, suffix = "names", overwrite = TRUE)
 
 ## est. avg. farm size
-# TODO
+# replace classifiers for cultivated land with values representing % of pixel
+# dedicated to cultivated land, make all other values "0"
+if(!file.exists(paste(od, "crop_c.tif", sep = "/"))) {
+    repl <- data.frame(key = 
+                c(11, 14, 20, 30, 40, 50, 60, 70, 90, 100, 110, 120, 130, 
+                  140, 150, 160, 170, 180, 190, 200, 210, 220),
+                repl = c(1L, 1L, 0.8, 0.5, rep(0, 18)))
+    crop.c <- subs(lc, repl, filename = paste(od, "crop_c.tif", sep = "/"))
+    # note this takes a SUPER long time
+} else {
+    crop.c <- raster(paste(od, "crop_c.tif", sep = "/"))
+}
+    
+# set crop pct geo stats equal to pop (pop res = 3x lc res)
+
+if(!file.exists(paste(od, "crop.pct.tif", sep = "/"))) {
+       crop.pct <- aggregate(crop.c, fact = 3, fun = "mean", na.rm = TRUE, 
+                             filename = paste(od, "crop.pct.tif", sep = "/")) 
+} else {
+    crop.pct <- raster(paste(od, "crop.pct.tif", sep = "/"))
+}
+crop.pct <- spatial_sync_raster(crop.pct, pop)
+
+av.size <- (crop.pct * land_area) / hhs # sqkms per hh
+kms.to.acres <- 0.004046857 # number of sq kms in an acre
+av.size <- av.size / kms.to.acres
+if(!file.exists(paste(od, "av__farm_size.tif", sep = "/"))) {
+    writeRaster(av.size, paste(od, "av_farm_size.tif", sep = "/"))
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
