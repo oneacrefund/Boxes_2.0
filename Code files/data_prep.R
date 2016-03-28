@@ -2,11 +2,11 @@
 # Author: Colin Custer (colin.custer@oneacrefund.org)
 # Description: A script to prep data for upload and storage on the Shiny server
 # Date created: 21 Mar 2016
-# Date modified: 26 Mar 2016
+# Date modified: 28 Mar 2016
 
 #### Set up ####
 
-## directories ##
+## directories ## 
 wd <- "~/drive/Boxes_2.0/Prep"
 dd <- paste(wd, "raw", sep = "/")
 od <- paste(wd, "output", sep = "/")
@@ -26,7 +26,7 @@ cat("\014")
 ## Core Program Indicators ## 
 # # monthly rainfall data for 1901 - 2014 (rain_ts, ~50km res) 
 
-# import rain .csv files, convert to raster files, and write to disk
+# import rain .csv files, convert to raster files
 rainpath <- paste(dd, "rainfall/time_series", sep = "/")
 rainlist <- list.files(rainpath, pattern = "*.csv", full.names = TRUE)
 r.files <- lapply(rainlist, read.table, sep = ",", header = FALSE, col.names = 
@@ -52,7 +52,6 @@ hhs <- pop / 6 # Divide population by 6 to get household counts
 
 # land area raster (land_area, for pop density and farm size, 1km res)
 land_area <- raster(paste(dd, "GRUMP/GL_AREAKM_Africa.tif", sep = "/"))
-land_area <- spatial_sync_raster(land_area, pop)
 
 # landcover data (lc, for farm size 300m res)
 if(!file.exists(paste(od, "lc_Africa.tif", sep = "?"))) {
@@ -90,8 +89,8 @@ soil.c.5 <- raster(paste(dd, "soil_carbon_ssa/soc_d5--SSA.tif", sep = "/"))
 soil.c.15 <- raster(paste(dd, "soil_carbon_ssa/soc_d15--SSA.tif", sep = "/"))
 
 # nitrogen content (g/kg) (soil.n,  250m res, 0-15cm and 15-30cm)
-soil.n.15 # TO DO
-soil.n.30 # TO DO
+# soil.n.15 # TO DO
+# soil.n.30 # TO DO
 
 ## Geography ##
 # elevation data (elev, 900m resolution)
@@ -105,52 +104,67 @@ gs.l <- raster(paste(dd, "glp/lgp.tif", sep = "/"))
 
 #### data processing: core program indicators #### 
 ## rural, peri-urban, and urban population calculations ##
-GRUMP <- spatial_sync_raster(GRUMP, pop, method = "ngb")
-vals <- unique(values(GRUMP))
-recl <- matrix(c(vals, NA, NA, 2), ncol = 2)
-GRUMP.u <- reclassify(GRUMP, rcl = recl)
-pu.des <- boundaries(GRUMP.u, directions = 4)
-u.des <- GRUMP.u-pu.des
-#add one to u.des s.t. r = 1, pu = 2, u = 3
-u.des <- u.des + 1
-rpu.des <- cover(u.des, GRUMP) # rural areas (NAs) remain 1s, p = 2 and u = 3
-writeRaster(rpu.des, paste(od, "rpu_designator.tif", sep = "/"))
-
+if(!file.exists(paste(od, "rpu_designator.tif", sep = "/"))) {
+    GRUMP <- spatial_sync_raster(GRUMP, pop, method = "ngb")
+    vals <- unique(values(GRUMP))
+    recl <- matrix(c(vals, NA, NA, 2), ncol = 2)
+    GRUMP.u <- reclassify(GRUMP, rcl = recl)
+    pu.des <- boundaries(GRUMP.u, directions = 4)
+    u.des <- GRUMP.u-pu.des
+    #add one to u.des s.t. r = 1, pu = 2, u = 3
+    u.des <- u.des + 1
+    rpu.des <- cover(u.des, GRUMP) # rural areas (NAs) remain 1s, p = 2 and u = 3
+    writeRaster(rpu.des, paste(od, "rpu_designator.tif", sep = "/"))
+} else{
+    rpu.des <- raster(paste(od, "rpu_designator.tif", sep = "/"))
+}
 
 
 ## rainfall monthly mean ##
 ## take stack of rainfall data, split into months, calculate mean, save to lists
 ## to change the years for which we're calculating mean, change "yr" start & len
-yr <- seq.int(1, by = 12, len = nlayers(r.stack)/12)
-months <- c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", 
-            "oct", "nov", "dec")
-
-for (i in 0:11) {
-    if (i == 0) {
-        r.months <- list()
-        rm.months <- list()
+if(!file.exists(paste(od, "rain_vol/rvol_apr.tif", sep = "/"))) {
+                      yr <- seq.int(1, by = 12, len = nlayers(r.stack)/12)
+    months <- c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", 
+                "oct", "nov", "dec")
+    
+    for (i in 0:11) {
+        if (i == 0) {
+            r.months <- list()
+            rm.months <- list()
+        }
+        mon <- stack(r.stack@layers[yr + i])
+        r.months <- c(r.months, mon)
+        rm.months <- c(rm.months, mean(mon))
     }
-    mon <- stack(r.stack@layers[yr + i])
-    r.months <- c(r.months, mon)
-    rm.months <- c(rm.months, mean(mon))
+    rm(i)
+    
+    names(r.months) <- months; names(rm.months) <- months
+    rain.m <- stack(rm.months)
+    
+    ## calc volatility of rainfall, write raster object to "output/rain_vol"
+    r.vol <- function(r, rm) {
+        vol <- sum(r < rm*0.7) / sum(!is.na(r)) # counts # of months rain was
+        return(vol)                             #  <70% of mean, / by # months
+        } 
+    vol.stack <- mapply(r.vol, r.months, rm.months) %>% stack()
+    
+    writeRaster(vol.stack, paste(od, "rain_vol/rvol", sep = "/"), format = "GTiff",
+                bylayer = TRUE, suffix = "names", overwrite = TRUE)
+    
+    writeRaster(stack(rm.months), paste(od, "rain_m/rm", sep = "/"), format = "GTiff", 
+                bylayer = TRUE, suffix = "names", overwrite = TRUE)
+} else {
+    rainpath <- paste(od, "rain_vol", sep = "/")
+    rain.vol.list <- list.files(rainpath, pattern = "*.tif$", full.names = TRUE)
+    r.vol.list <- lapply(rain.vol.list, raster)
+    r.vol <- stack(r.vol.list)
+    
+    rainpath <- paste(od, "rain_m", sep = "/")
+    r.m.list <- list.files(rainpath, pattern = "*.tif$", full.names = TRUE)
+    rain.m <- stack(r.m.list)
 }
-rm(i)
 
-names(r.months) <- months; names(rm.months) <- months
-
-## calc volatility of rainfall, write raster object to "output/rain_vol"
-r.vol <- function(r, rm) {
-    vol <- sum(r < rm*0.7) / sum(!is.na(r))
-    return(vol)
-}
-
-vol.stack <- mapply(r.vol, r.months, rm.months) %>% stack()
-
-writeRaster(vol.stack, paste(od, "rain_vol/rvol", sep = "/"), format = "GTiff",
-            bylayer = TRUE, suffix = "names", overwrite = TRUE)
-
-writeRaster(stack(rm.months), paste(od, "rain_m/rm", sep = "/"), format = "GTiff", 
-            bylayer = TRUE, suffix = "names", overwrite = TRUE)
 
 ## est. avg. farm size
 # replace classifiers for cultivated land with values representing % of pixel
@@ -174,19 +188,18 @@ if(!file.exists(paste(od, "crop.pct.tif", sep = "/"))) {
 } else {
     crop.pct <- raster(paste(od, "crop.pct.tif", sep = "/"))
 }
-crop.pct <- spatial_sync_raster(crop.pct, pop)
 
-av.size <- (crop.pct * land_area) / hhs # sqkms per hh
-kms.to.acres <- 0.004046857 # number of sq kms in an acre
-av.size <- av.size / kms.to.acres
-if(!file.exists(paste(od, "av__farm_size.tif", sep = "/"))) {
+if(!file.exists(paste(od, "av_farm_size.tif", sep = "/"))) {
+    land_area <- spatial_sync_raster(land_area, pop)
+    crop.pct <- spatial_sync_raster(crop.pct, pop)
+
+    av.size <- (crop.pct * land_area) / hhs # sqkms per hh
+    kms.to.acres <- 0.004046857 # number of sq kms in an acre
+    av.size <- av.size / kms.to.acres
     writeRaster(av.size, paste(od, "av_farm_size.tif", sep = "/"))
+} else {
+    av.size <- paste(od, "av_farm_size.tif", sep = "/")
 }
-
-
-
-
-
 
 
 
