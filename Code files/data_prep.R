@@ -2,9 +2,11 @@
 # Author: Colin Custer (colin.custer@oneacrefund.org)
 # Description: A script to prep data for upload and storage on the Shiny server
 # Date created: 21 Mar 2016
-# Date modified: 28 Mar 2016
+# Date modified: 29 Mar 2016
 
 #### Set up ####
+
+# Note, if calculations not made, this code takes ~2.5 hrs to run
 
 ## directories ## 
 wd <- "~/drive/Boxes_2.0/Prep"
@@ -27,44 +29,58 @@ cat("\014")
 # # monthly rainfall data for 1901 - 2014 (rain_ts, ~50km res) 
 
 # import rain .csv files, convert to raster files
-rainpath <- paste(dd, "rainfall/time_series", sep = "/")
-rainlist <- list.files(rainpath, pattern = "*.csv", full.names = TRUE)
-r.files <- lapply(rainlist, read.table, sep = ",", header = FALSE, col.names = 
+if(!file.exists(paste(od, "rain_vol/rvol_apr.tif", sep = "/"))){
+    rainpath <- paste(dd, "rainfall/time_series", sep = "/")
+    rainlist <- list.files(rainpath, pattern = "*.csv", full.names = TRUE)
+    if(!length(rainlist) == 1368) {
+        stop("Rainfall files appear to have duplicates or missing files.
+            Please check the input folder and try again.")
+    }
+    r.files <- lapply(rainlist, read.table, sep = ",", header = FALSE, col.names = 
                       c("y", seq(-18.2, by = 0.5, len = 141)), skip = 44)
 
-r.convert <- function(csv_file, r.crs = "+proj=longlat +datum=WGS84 +no_defs 
-                      +ellps=WGS84 +towgs84=0,0,0") {
-    long.csv <- gather(csv_file, x, pre, X.18.2:X51.8) %>% select(x, y, pre)
-    long.csv$x <- seq(-18.2, by = 0.5, len = 141) %>% rep(144) %>% sort()
-    long.csv$y <- seq(-33.8, by = 0.5, len = 144)
-    r.raster <- rasterFromXYZ(long.csv, crs = r.crs) 
-    r.raster[r.raster == -10000] <- NA
-    return(r.raster)
+    r.convert <- function(csv_file, r.crs = "+proj=longlat +datum=WGS84 +no_defs 
+                          +ellps=WGS84 +towgs84=0,0,0") {
+        long.csv <- gather(csv_file, x, pre, X.18.2:X51.8) %>% select(x, y, pre)
+        long.csv$x <- seq(-18.2, by = 0.5, len = 141) %>% rep(144) %>% sort()
+        long.csv$y <- seq(-33.8, by = 0.5, len = 144)
+        r.raster <- rasterFromXYZ(long.csv, crs = r.crs) 
+        r.raster[r.raster == -10000] <- NA
+        return(r.raster)
     }
-
-r.stack <- lapply(r.files, r.convert) %>% stack()
+    
+    r.stack <- lapply(r.files, r.convert) %>% stack()
+}
 
 # WorldPop population estimates for 2010 (pop, 1km res)
 pop <- raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif", 
                     sep = "/"))
+if(!file.exists(paste(od, "hhs_Africa.tif", sep = "/"))) {
 hhs <- pop / 6 # Divide population by 6 to get household counts
+writeRaster(hhs, paste(od, "hhs_Africa.tif", sep = "/"))
+} else {
+    hhs <- raster(paste(od, "hhs_Africa.tif", sep = "/"))
+}
+
 # pop.tot <- cellStats(pop, sum, na.rm = TRUE) # 1,021,363,776
 
 # land area raster (land_area, for pop density and farm size, 1km res)
 land_area <- raster(paste(dd, "GRUMP/GL_AREAKM_Africa.tif", sep = "/"))
 
 # landcover data (lc, for farm size 300m res)
-if(!file.exists(paste(od, "lc_Africa.tif", sep = "?"))) {
+if(!file.exists(paste(od, "lc_Africa.tif", sep = "/"))) {
     lc.raw <- raster(paste(dd, "landCover/ESA_GlobCover.tif", sep ="/"))
-lc <- crop(lc.raw, pop, filename = paste(od, "lc_Africa.tif", sep = "/"), 
+    lc <- crop(lc.raw, pop, filename = paste(od, "lc_Africa.tif", sep = "/"), 
            overwrite = TRUE)
 } else {
     lc <- raster(paste(od, "lc_Africa.tif", sep = "/"))
 }
 
 # urban extent data (GRUMP, 1km res)
-GRUMP.raw <- readGDAL(paste(dd,"GRUMP/afurextents.bil", sep = "/"))
-GRUMP <- raster(GRUMP.raw); rm(GRUMP.raw)
+if(!file.exists(paste(od, "rpu_designator.tif", sep = "/"))){
+    GRUMP.raw <- readGDAL(paste(dd,"GRUMP/afurextents.bil", sep = "/"))
+    GRUMP <- raster(GRUMP.raw); rm(GRUMP.raw)
+}
 
 ## crop data ##
 # crop mix data (physical area cultivated for each crop, ca.stack, 10km res)
@@ -124,7 +140,7 @@ if(!file.exists(paste(od, "rpu_designator.tif", sep = "/"))) {
 ## take stack of rainfall data, split into months, calculate mean, save to lists
 ## to change the years for which we're calculating mean, change "yr" start & len
 if(!file.exists(paste(od, "rain_vol/rvol_apr.tif", sep = "/"))) {
-                      yr <- seq.int(1, by = 12, len = nlayers(r.stack)/12)
+    yr <- seq.int(1, by = 12, len = floor(nlayers(r.stack)/12))
     months <- c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", 
                 "oct", "nov", "dec")
     
@@ -200,11 +216,6 @@ if(!file.exists(paste(od, "av_farm_size.tif", sep = "/"))) {
 } else {
     av.size <- paste(od, "av_farm_size.tif", sep = "/")
 }
-
-
-
-
-
 
 
 
