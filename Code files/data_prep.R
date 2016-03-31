@@ -4,6 +4,8 @@
 # Date created: 21 Mar 2016
 # Date modified: 29 Mar 2016
 
+start <- Sys.time()
+
 #### Set up ####
 
 # Note, if calculations not made, this code takes ~2.5 hrs to run
@@ -14,7 +16,7 @@ dd <- paste(wd, "raw", sep = "/")
 od <- paste(wd, "output", sep = "/")
 
 ## libraries ##
-libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", 
+libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", "leaflet",
           "dplyr", "spatial.tools")
 lapply(libs, require, character.only = TRUE)
 rm(libs)
@@ -26,6 +28,16 @@ cat("\014")
 # to pop. 
 
 ## Core Program Indicators ## 
+
+# WorldPop population estimates for 2010 (pop, 1km res)
+if(!file.exists(paste(od, "leaflet_pop.tif", sep = "/"))){
+    pop <- raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif", 
+                    sep = "/")) %>% projectRasterForLeaflet()
+    writeRaster(pop, paste(sdd, "leaflet_pop.tif", sep = "/"))
+} else{
+    pop <- raster(paste(sdd, "leaflet_pop.tif", sep = "/"))
+}
+
 # # monthly rainfall data for 1901 - 2014 (rain_ts, ~50km res) 
 
 # import rain .csv files, convert to raster files
@@ -52,9 +64,6 @@ if(!file.exists(paste(od, "rain_vol/rvol_apr.tif", sep = "/"))){
     r.stack <- lapply(r.files, r.convert) %>% stack()
 }
 
-# WorldPop population estimates for 2010 (pop, 1km res)
-pop <- raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif", 
-                    sep = "/"))
 if(!file.exists(paste(od, "hhs_Africa.tif", sep = "/"))) {
 hhs <- pop / 6 # Divide population by 6 to get household counts
 writeRaster(hhs, paste(od, "hhs_Africa.tif", sep = "/"))
@@ -65,7 +74,12 @@ writeRaster(hhs, paste(od, "hhs_Africa.tif", sep = "/"))
 # pop.tot <- cellStats(pop, sum, na.rm = TRUE) # 1,021,363,776
 
 # land area raster (land_area, for pop density and farm size, 1km res)
-land_area <- raster(paste(dd, "GRUMP/GL_AREAKM_Africa.tif", sep = "/"))
+if(!file.exists(paste(od, "land_area_leaflet.tif", sep = "/"))){
+    land_area <- raster(paste(dd, "GRUMP/GL_AREAKM_Africa.tif", sep = "/"))
+    land_area <- land_area %>% spatial_sync_raster(pop, method = "bilinear") %>% 
+        projectRasterForLeaflet()
+    writeRaster(land_area, paste(od, "land_area_leaflet.tif", sep = "/"))
+}
 
 # landcover data (lc, for farm size 300m res)
 if(!file.exists(paste(od, "lc_Africa.tif", sep = "/"))) {
@@ -163,24 +177,31 @@ if(!file.exists(paste(od, "rain_vol/rvol_apr.tif", sep = "/"))) {
         vol <- sum(r < rm*0.7) / sum(!is.na(r)) # counts # of months rain was
         return(vol)                             #  <70% of mean, / by # months
         } 
-    vol.stack <- mapply(r.vol, r.months, rm.months) %>% stack()
+    vol.stack <- mapply(r.vol, r.months, rain.m) %>% stack()
     
-    writeRaster(vol.stack, paste(od, "rain_vol/rvol", sep = "/"), format = "GTiff",
+    writeRaster(vol.stack, paste(sdd, "r_vol/", sep = "/"), format = "GTiff",
                 bylayer = TRUE, suffix = "names", overwrite = TRUE)
     
-    writeRaster(stack(rm.months), paste(od, "rain_m/rm", sep = "/"), format = "GTiff", 
+    writeRaster(rain.m, paste(od, "r_m/", sep = "/"), format = "GTiff", 
                 bylayer = TRUE, suffix = "names", overwrite = TRUE)
 } else {
     rainpath <- paste(od, "rain_vol", sep = "/")
     rain.vol.list <- list.files(rainpath, pattern = "*.tif$", full.names = TRUE)
     r.vol.list <- lapply(rain.vol.list, raster)
-    r.vol <- stack(r.vol.list)
+    vol.stack <- stack(r.vol.list)
     
     rainpath <- paste(od, "rain_m", sep = "/")
     r.m.list <- list.files(rainpath, pattern = "*.tif$", full.names = TRUE)
     rain.m <- stack(r.m.list)
 }
 
+## population density
+if(!file.exists(paste(sdd, "pop.dense.tif", sep = "/"))) {
+    pop.dens <- pop/land_area
+    writeRaster(pop.dens, filename = paste(sdd, "pop.dense.tif", sep = "/"))
+} else {
+    pop.dense <- raster(paste(sdd, "pop.dense.tif", sep = "/"))
+}
 
 ## est. avg. farm size
 # replace classifiers for cultivated land with values representing % of pixel
@@ -198,15 +219,14 @@ if(!file.exists(paste(od, "crop_c.tif", sep = "/"))) {
     
 # set crop pct geo stats equal to pop (pop res = 3x lc res)
 
-if(!file.exists(paste(od, "crop.pct.tif", sep = "/"))) {
+if(!file.exists(paste(sdd, "crop_pct.tif", sep = "/"))) {
        crop.pct <- aggregate(crop.c, fact = 3, fun = "mean", na.rm = TRUE, 
                              filename = paste(od, "crop.pct.tif", sep = "/")) 
 } else {
-    crop.pct <- raster(paste(od, "crop.pct.tif", sep = "/"))
+    crop.pct <- raster(paste(sdd, "crop_pct.tif", sep = "/"))
 }
 
-if(!file.exists(paste(od, "av_farm_size.tif", sep = "/"))) {
-    land_area <- spatial_sync_raster(land_area, pop)
+if(!file.exists(paste(sdd, "av_farm_size.tif", sep = "/"))) {
     crop.pct <- spatial_sync_raster(crop.pct, pop)
 
     av.size <- (crop.pct * land_area) / hhs # sqkms per hh
@@ -214,8 +234,50 @@ if(!file.exists(paste(od, "av_farm_size.tif", sep = "/"))) {
     av.size <- av.size / kms.to.acres
     writeRaster(av.size, paste(od, "av_farm_size.tif", sep = "/"))
 } else {
-    av.size <- paste(od, "av_farm_size.tif", sep = "/")
+    av.size <- raster(paste(sdd, "av_farm_size.tif", sep = "/"))
 }
 
+#### prep data for leaflet and save to Shiny app data file ####
+sdd <- "~/drive/Boxes_2.0/Shiny/data" # shiny data directory
 
+# sync average farm size data to "pop" raster
+if(!file.exists(paste(sdd, "av_farm_size.tif", sep = "/"))) {
+av.size <- spatial_sync_raster(av.size, pop, method = "bilinear") %>% 
+    projectRasterForLeaflet()
+    writeRaster(av.size, paste(sdd, "av_farm_size.tif", sep = "/"))
+}
+
+# sync "% of land that is cropland" data to "pop" raster
+if(!file.exists(paste(sdd, "crop_pct.tif", sep = "/"))) {
+    crop.pct <- spatial_sync_raster(crop.pct, pop, method = "bilinear") %>% 
+        projectRasterForLeaflet()
+    writeRaster(crop.pct, paste(sdd, "crop_pct.tif", sep = "/"))
+}
+
+# sync rainfall mean data to "pop" raster
+if(!file.exists(paste(sdd, "r_m/rm_apr.tif", sep = "/"))) {
+    m.stack <- spatial_sync_raster(rain.m, pop, method = "bilinear") %>%
+        projectRasterForLeaflet()
+        writeRaster(m.stack, paste(sdd, "r_m/rm", sep = "/"),
+                    format = "GTiff", bylayer = TRUE,
+                    suffix = "names", overwrite = TRUE)
+}
+
+# sync rainfall volatility data to "pop" raster
+if(!file.exists(paste(sdd, "r_vol/rvol_apr.tif", sep = "/"))) {
+    vol.stack <- spatial_sync_raster(vol.stack, pop, method = "bilinear") %>%
+        projectRasterForLeaflet()
+        writeRaster(vol.stack, paste(sdd, "r_vol/", sep = "/"),
+                    format = "GTiff", bylayer = TRUE,
+                    suffix = "names", overwrite = TRUE)
+}
+
+# sync land use data to "pop" raster
+if(!file.exists(paste(sdd, "lc.tif", sep = "/"))) {
+    lc <- spatial_sync_raster(lc, pop, method = "ngb") %>% 
+        projectRasterForLeaflet()
+    writeRaster(lc, paste(sdd, "lc.tif", sep = "/"))
+}
+
+duration <- Sys.time() - start; duration
 
