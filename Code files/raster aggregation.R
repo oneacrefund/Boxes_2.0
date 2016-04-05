@@ -5,18 +5,17 @@
 # date modified: 5 Apr 2016
 # description: aggregate all data rasters to specificed resolutions
 #              then return a matrix of values for each resolution. In this
-#              matrix, each row is a layer, each column a cell. Then for each 
+#              matrix, each row is a cell, each column a layer. Then for each 
 #              cell, you will be able to return a numeric vector of values for 
 #              each layer, which can be evaluated based on filter criteria
 
 rm(list = ls())
 
 # set up
+load(paste(dd, "cleanData.RData", sep = "/"))
 wd <- "~/drive/Boxes_2.0/Shiny"
 cd <- paste("~/drive/Boxes_2.0/Code files", sep = "/")
 dd <- paste(wd, "data", sep = "/")
-
-load(paste(dd, "cleanData.RData", sep = "/"))
 
 mean.rasters.raw <- list(av.size, rain.m, rain.v, pop.dense, slp, gs.l, elev, 
                      soil.c.5, soil.c.15)
@@ -44,7 +43,7 @@ for(i in res.reqd) {
                                          sep = "/"), "mean_mat.ffdata", sep = "/"))
     
     for(j in 1:nlayers(mean.agrasters)){
-        sum.mat[,j] <- mean.agrasters[[j]][]
+        mean.mat[,j] <- mean.agrasters[[j]][]
     }
     save(mean.mat,file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
                                    sep = "/"), "mean_mat.ffdata", sep = "/"))
