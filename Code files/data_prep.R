@@ -18,8 +18,8 @@ dd <- paste(wd, "raw", sep = "/")
 od <- paste(wd, "output", sep = "/")
 sdd <- "~/drive/Boxes_2.0/Shiny/data"
 ## libraries ##
-libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", "leaflet",
-          "dplyr", "spatial.tools")
+libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", "leaflet", 
+          "dplyr", "spatial.tools", "ff")
 lapply(libs, require, character.only = TRUE)
 rm(libs)
 cat("\014")
@@ -164,7 +164,7 @@ if(!file.exists(paste(sdd, "soil.c.5.tif", sep = "/"))){
     soil.c.15 <- spatial_sync_raster(soil.c.15, pop, method = "ngb")
     writeRaster(soil.c.15, paste(sdd, "soil.c.15.tif", sep = "/"))
 } else {
-    soil.c.5 <- raster(paste(sdd, "soil.c.15.tif", sep = "/"))
+    soil.c.15 <- raster(paste(sdd, "soil.c.15.tif", sep = "/"))
 }
 
 # nitrogen content (g/kg) (soil.n,  250m res, 0-15cm and 15-30cm)
@@ -194,7 +194,7 @@ if(!file.exists(paste(sdd, "slp.tif", sep = "/"))){
 
 # length of growing season (month) (gs.l, 10km res)
 if(!file.exists(paste(sdd, "growingseasons.tif", sep = "/"))){
-    gs.l <- raster(paste(dd, "glp/lgp.tif", sep = "/")) %>% 
+    gs.l <- raster(paste(dd, "/glp/lgp.tif", sep = "/")) %>% 
     spatial_sync_raster(pop, method = "ngb")
     writeRaster(gs.l, paste(sdd, "growingseasons.tif", sep = "/"))
 } else {
@@ -346,5 +346,6 @@ if(!file.exists(paste(sdd, "lc.tif", sep = "/"))) {
     writeRaster(lc, paste(sdd, "lc.tif", sep = "/"))
 }
 
+save.image(file = paste(sdd, "cleanData.RData", sep = "/"))
 duration <- Sys.time() - start; duration
 
