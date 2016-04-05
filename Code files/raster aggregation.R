@@ -12,25 +12,31 @@
 rm(list = ls())
 
 # set up
-load(paste(dd, "cleanData.RData", sep = "/"))
 wd <- "~/drive/Boxes_2.0/Shiny"
 cd <- paste("~/drive/Boxes_2.0/Code files", sep = "/")
 dd <- paste(wd, "data", sep = "/")
+source(paste(cd, "data_prep.r", sep = "/"))
 
 mean.rasters.raw <- list(av.size, rain.m, rain.v, pop.dense, slp, gs.l, elev, 
                      soil.c.5, soil.c.15)
 names(mean.rasters.raw) <- c("av.size", "rain.m", "rain.v", "pop.dense", "slp", 
                          "gs.l", "elev", "soil.c.5", "soil.c.15")
+stack(mean.rasters.raw) # test: throws error if raster extents are innacurate
 
 sum.rasters.raw <- list(ca.stack, hhs, k.con, n.con, p.con, pop, land_area)
 names(sum.rasters.raw) <- c("ca.stack", "hhs", "k.con", "n.con", "p.con", "pop", 
                         "land_area")
+stack(sum.rasters.raw) # test: throws error if raster extents are innacurate
 
 other.rasters.raw <- list("rpu.des" = rpu.des, "lc" = lc) # TODO
+stack(other.rasters.raw) # test: throws error if raster extents are innacurate
+
 
 res.reqd <- c(seq(5, 80, by = 5))
 
+# aggregate data rasters to each of the res's specified above, write to disk
 for(i in res.reqd) {
+# aggreate all rasters that use "mean" to aggregate, then write to disk
     mean.agrasters <- lapply(mean.rasters.raw, aggregate, fact = i, 
                              fun = mean, na.rm = TRUE)
     mean.agrasters <- stack(mean.agrasters)
@@ -38,30 +44,32 @@ for(i in res.reqd) {
                 paste(dd, "resRasters", paste(i, "km/mean", sep = ""), sep = "/"),
                 format = "GTiff", bylayer = TRUE, suffix = "names")
     
-    mean.mat <- ff(vmode="double",dim=c(ncell(mean.agrasters),nlayers(mean.agrasters)),
-                    filename=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
-                                         sep = "/"), "mean_mat.ffdata", sep = "/"))
-    
-    for(j in 1:nlayers(mean.agrasters)){
-        mean.mat[,j] <- mean.agrasters[[j]][]
-    }
-    save(mean.mat,file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
-                                   sep = "/"), "mean_mat.ffdata", sep = "/"))
-    
+# aggreate all rasters that use "sum" to aggregate, then write to disk
     sum.agrasters <- lapply(sum.rasters.raw, aggregate, fact = i, 
                             fun = sum, na.rm = TRUE)
     sum.agrasters <- stack(sum.agrasters)
     writeRaster(sum.agrasters,
                 paste(dd, "resRasters", paste(i, "km/sum", sep = ""), sep = "/"),
                 format = "GTiff", byLayer = TRUE, suffix = "names")
-    sum.mat <- ff(vmode="double",dim=c(ncell(sum.agrasters),nlayers(sum.agrasters)),
-                   filename=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
-                                        sep = "/"), "sum_mat.ffdata", sep = "/"))
     
-    for(j in 1:nlayers(sum.agrasters)){
-        sum.mat[,j] <- sum.agrasters[[j]][]
+    # stack all rasters together
+    all.agrasters <- stack(sum.agrasters, mean.agrasters)
+    
+   ## create a data matrix to hold all values for every layer. Rows = cells, 
+   ## Columns = layers
+    # create variables for layer numbers
+    nc <- ncell(all.agrasters)
+    nl <- nlayers(all.agrasters)
+    
+    # create an empty matrix on disk. "ff()" processes on disk, not in memory
+    dat.mat <- ff(vmode="double",dim=c(nc,nl),
+                filename=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
+                                     sep = "/"), "dat_mat.ffdata", sep = "/"))
+    
+    for(j in 1:nl){
+        dat.mat[,j] <- all.agrasters[[j]][]
     }
-    save(sum.mat,file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
-                                  sep = "/"), "sum_mat.ffdata", sep = "/"))
+    save(dat.mat, file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
+                                   sep = "/"), "dat_mat.ffdata", sep = "/"))
 
     }
