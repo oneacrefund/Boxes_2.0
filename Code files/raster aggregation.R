@@ -2,7 +2,7 @@
 # created by: colin custer (colin.custer@oneacrefund.org)
 # created for: Boxes 2.0 (https://github.com/ccc5vd/Boxes_2.0)
 # date created: 5 Apr 2016
-# date modified: 5 Apr 2016
+# date modified: 6 Apr 2016
 # description: aggregate all data rasters to specificed resolutions
 #              then return a matrix of values for each resolution. In this
 #              matrix, each row is a cell, each column a layer. Then for each 
@@ -12,10 +12,10 @@
 rm(list = ls())
 
 # set up
-wd <- "~/drive/Boxes_2.0/Shiny"
 cd <- paste("~/drive/Boxes_2.0/Code files", sep = "/")
-dd <- paste(wd, "data", sep = "/")
 source(paste(cd, "data_prep.r", sep = "/"))
+swd <- "~/drive/Boxes_2.0/Shiny"
+dd <- paste(swd, "data", sep = "/")
 
 mean.rasters.raw <- list(av.size, rain.m, rain.v, pop.dense, slp, gs.l, elev, 
                      soil.c.5, soil.c.15)
@@ -50,7 +50,7 @@ for(i in res.reqd) {
     sum.agrasters <- stack(sum.agrasters)
     writeRaster(sum.agrasters,
                 paste(dd, "resRasters", paste(i, "km/sum", sep = ""), sep = "/"),
-                format = "GTiff", byLayer = TRUE, suffix = "names")
+                format = "GTiff", bylayer = TRUE, suffix = "names")
     
     # stack all rasters together
     all.agrasters <- stack(sum.agrasters, mean.agrasters)
@@ -61,15 +61,25 @@ for(i in res.reqd) {
     nc <- ncell(all.agrasters)
     nl <- nlayers(all.agrasters)
     
-    # create an empty matrix on disk. "ff()" processes on disk, not in memory
-    dat.mat <- ff(vmode="double",dim=c(nc,nl),
-                filename=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
+    # create an empty matrix with the number of cells == nlayers x ncells/layer
+    dat.mat <- ff(vmode="double", dim=c(nc,nl),
+                file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
                                      sep = "/"), "dat_mat.ffdata", sep = "/"))
+    # fill the empty matrix layer by layer, column by column
+    # Each row is a cell, each layer is a column. Now by querying a row, you get 
+    # the value for each layer for the specified row
     
     for(j in 1:nl){
         dat.mat[,j] <- all.agrasters[[j]][]
     }
-    save(dat.mat, file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
-                                   sep = "/"), "dat_mat.ffdata", sep = "/"))
+    save(dat.mat,file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
+                                  sep = "/"), "dat_mat.RData", sep = "/"))
+    
+    # Create ID rasters for each resolution that will allow us to identify which
+    # matrix cells to query for T/F tests
+    ID_raster <- raster(all.agrasters[[1]])
+    ID_ratster[] <- 1:nc # raster where each cell value == cell index
+    
+}
 
-    }
+    
