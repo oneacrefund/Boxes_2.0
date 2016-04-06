@@ -86,6 +86,8 @@ for(i in res.reqd) {
     }
     save(dat.mat,file=paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
                                   sep = "/"), "dat_mat.RData", sep = "/"))
+    # Note: to reopen this saved .RData file, make sure library("ff") is loaded, 
+    # then load(dat_mat.RData) --> open(dat.mat). Then you can access the matrix 
     
     # Create ID rasters for each resolution that will allow us to identify which
     # matrix cells to query for T/F tests
