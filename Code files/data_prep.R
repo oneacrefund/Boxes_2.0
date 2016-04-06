@@ -2,7 +2,7 @@
 # Author: Colin Custer (colin.custer@oneacrefund.org)
 # Description: A script to prep data for upload and storage on the Shiny server
 # Date created: 21 Mar 2016
-# Date modified: 5 Apr 2016
+# Date modified: 6 Apr 2016
 
 rm(list=ls())
 
@@ -10,7 +10,8 @@ start <- Sys.time()
 
 #### Set up ####
 
-# Note, if calculations not made, this code takes ~2.5 hrs to run
+# Note, if calculations not made, this code takes ~5.5 hrs to run. Make sure 
+# directories are correctly referencing your computers directory versions
 
 ## directories ## 
 wd <- "~/drive/Boxes_2.0/Prep"
@@ -24,6 +25,12 @@ lapply(libs, require, character.only = TRUE)
 rm(libs)
 cat("\014")
 
+
+# create an "extent" raster for cropping of larget global data sets
+extent <-
+    raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif",
+                 sep = "/"))
+
 ### Load data for prepping ###
 
 # Note: "Pop" is the canonical dataset for spatial questions, all rasters sync
@@ -31,13 +38,18 @@ cat("\014")
 
 ## Core Program Indicators ## 
 
+# in each instance, code checks to see if pre-processing is complete. If not, 
+# processing of data is done as necessary, then output written to Shiny data dir
+
 # WorldPop population estimates for 2010 (pop, 1km res)
+# Processing: reproject for leaflet output (makes pop cannonical for Shiny app)
 if(!file.exists(paste(sdd, "leaflet_pop.tif", sep = "/"))){
-    pop <- raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif", 
+    pop <- raster(
+        paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif", 
                     sep = "/")) %>% projectRasterForLeaflet()
     writeRaster(pop, paste(sdd, "leaflet_pop.tif", sep = "/"))
 } else{
-    pop <- raster(paste(sdd, "leaflet_pop.tif", sep = "/"))
+    pop <- raster(paste(sdd, "leaflet_pop.tif", sep = "/")) 
 }
 
 # # monthly rainfall data for 1901 - 2014 (rain_ts, ~50km res) 
@@ -46,14 +58,20 @@ if(!file.exists(paste(sdd, "leaflet_pop.tif", sep = "/"))){
 if(!file.exists(paste(sdd, "r_vol/rvol_apr.tif", sep = "/"))){
     rainpath <- paste(dd, "rainfall/time_series", sep = "/")
     rainlist <- list.files(rainpath, pattern = "*.csv", full.names = TRUE)
+    # check if Google Drive has sync errors (i.e. duplicated files)
+    # If so, abort load and throw error message
     if(!length(rainlist) == 1368) {
         stop("Rainfall files appear to have duplicates or missing files.
-            Please check the input folder and try again.")
+            Please check the input folder and try again.") 
     }
-    r.files <- lapply(rainlist, read.table, sep = ",", header = FALSE, col.names = 
-                      c("y", seq(-18.2, by = 0.5, len = 141)), skip = 44)
+    # read all .csv files in as tables
+    r.files <- lapply(rainlist, read.table, sep = ",", 
+                      header = FALSE, col.names = c("y", 
+                                                    seq(-18.2, by = 0.5, 
+                                                        len = 141)), skip = 44)
 
-    r.convert <- function(csv_file, r.crs = "+proj=merc +lon_0=0 +lat_ts=0 +x_0=0 
+    # create a function to convert CRU rainfall data to raster format
+    r.convert <- function(csv_file, r.crs= "+proj=merc +lon_0=0 +lat_ts=0 +x_0=0 
                             +y_0=0 +a=6378137 +b=6378137 +units=m+no_defs") {
         long.csv <- gather(csv_file, x, pre, X.18.2:X51.8) %>% select(x, y, pre)
         long.csv$x <- seq(-18.2, by = 0.5, len = 141) %>% rep(144) %>% sort()
@@ -63,11 +81,13 @@ if(!file.exists(paste(sdd, "r_vol/rvol_apr.tif", sep = "/"))){
         return(r.raster)
     }
     
+    # apply convert function to rainfall .csv files, then create a stack
     r.stack <- lapply(r.files, r.convert) %>% stack()
 }
 
+# household data is simply population data divided by ** 6 **
 if(!file.exists(paste(sdd, "hhs_Africa.tif", sep = "/"))) {
-hhs <- pop / 6 # Divide population by 6 to get household counts
+hhs <- pop / 6
 writeRaster(hhs, paste(sdd, "hhs_Africa.tif", sep = "/"), overwrite = TRUE)
 } else {
     hhs <- raster(paste(sdd, "hhs_Africa.tif", sep = "/"))
@@ -84,13 +104,15 @@ if(!file.exists(paste(sdd, "land_area_leaflet.tif", sep = "/"))){
 # landcover data (lc, for farm size 300m res)
 if(!file.exists(paste(sdd, "lc.tif", sep = "/"))) {
     lc.raw <- raster(paste(dd, "landCover/ESA_GlobCover.tif", sep ="/"))
-    lc <- spatial_sync_raster(lc.raw, pop, filename = paste(sdd, "lc.tif", sep = "/"), 
-           overwrite = TRUE)
+    lc <- spatial_sync_raster(lc.raw, pop, 
+                              filename = paste(sdd, "lc.tif", sep = "/"), 
+                              overwrite = TRUE)
 } else {
     lc <- raster(paste(sdd, "lc.tif", sep = "/"))
 }
 
-# urban extent data (GRUMP, 1km res)
+# urban extent data (GRUMP, 1km res) 
+# read rpu.des in if exists, otherwise GRUMP is read to create rpu.des below
 if(!file.exists(paste(sdd, "rpu_designator.tif", sep = "/"))){
     GRUMP.raw <- readGDAL(paste(dd,"GRUMP/afurextents.bil", sep = "/"))
     GRUMP <- raster(GRUMP.raw); rm(GRUMP.raw)
@@ -98,28 +120,28 @@ if(!file.exists(paste(sdd, "rpu_designator.tif", sep = "/"))){
 
 ## crop data ##
 # crop mix data (physical area cultivated for each crop, ca.stack, 10km res)
-extent <-
-  raster(paste(dd, "AfriPOP_2010/WorldPop-Africa_updated/africa2010ppp.tif",
-               sep = "/"))
-
 if(!file.exists(paste(sdd, "crop_data/prod_banana.tif", sep = "/"))) {
-    ca.stack.raw <- list.files(paste(dd, "cropData", sep = "/"), pattern = "tiff$",
-                       full.names = TRUE) %>% stack()
+  # read all raw crop production data files into a stack
+    ca.stack.raw <- list.files(paste(dd, "cropData", sep = "/"),
+                               pattern = "tiff$", full.names = TRUE) %>% 
+        stack()
+  
+  # crop stack to extent of Africa, then sync to population raster
     ca.stack.cropped <- crop(ca.stack.raw, extent)
     ca.stack <- spatial_sync_raster(ca.stack.cropped, pop, method = "ngb")
-    writeRaster(ca.stack, paste(sdd, "crop_data/prod", sep = "/"), format = "GTiff",
-                progress = TRUE, bylayer = TRUE, suffix = "names")
+    writeRaster(ca.stack, paste(sdd, "crop_data/prod", sep = "/"), 
+                format = "GTiff", bylayer = TRUE, suffix = "names")
 
 } else {
     ca.stack <- list.files(paste(sdd, "crop_data", sep = "/"), pattern = "tif$",
                            full.names = TRUE) %>% stack()
 }
 
-# yield gaps (TO DO)
+# yield gaps (TODO)
 
-# hybrid seed adoption (TO DO) 
+# hybrid seed adoption (TODO) 
 
-## fertilizer data ##
+## fertilizer data (follows similar procedure to crop data)##
 # fertilizer consumption data (f.n.con, f.p.con, 10km res)
 if(!file.exists(paste(sdd, "n.con.tif", sep = "/"))){
     n.con <- raster(paste(dd, "fertConsumption/N.con.tif", sep = "/")) %>% 
@@ -147,8 +169,6 @@ if(!file.exists(paste(sdd, "k.con.tif", sep = "/"))){
     k.con <- raster(paste(sdd, "k.con.tif", sep = "/"))
 }
 
-# fertilizer application rates NOTE: this is crop-specific and will not be used
-
 ## soil fertility ##
 # soil organic carbon ppm (soil.c, 10km res, 0-5cm and 5-15cm, SSA only)
 if(!file.exists(paste(sdd, "soil.c.5.tif", sep = "/"))){
@@ -160,7 +180,7 @@ if(!file.exists(paste(sdd, "soil.c.5.tif", sep = "/"))){
 }
         
 if(!file.exists(paste(sdd, "soil.c.5.tif", sep = "/"))){
-    soil.c.15 <- raster(paste(dd, "soil_carbon_ssa/soc_d15--SSA.tif", sep = "/"))
+    soil.c.15<- raster(paste(dd, "soil_carbon_ssa/soc_d15--SSA.tif", sep = "/"))
     soil.c.15 <- spatial_sync_raster(soil.c.15, pop, method = "ngb")
     writeRaster(soil.c.15, paste(sdd, "soil.c.15.tif", sep = "/"))
 } else {
@@ -168,8 +188,8 @@ if(!file.exists(paste(sdd, "soil.c.5.tif", sep = "/"))){
 }
 
 # nitrogen content (g/kg) (soil.n,  250m res, 0-15cm and 15-30cm)
-# soil.n.15 # TO DO
-# soil.n.30 # TO DO
+# soil.n.15 # TODO
+# soil.n.30 # TODO
 
 ## Geography ##
 # elevation data (elev, 900m resolution)
@@ -201,18 +221,28 @@ if(!file.exists(paste(sdd, "growingseasons.tif", sep = "/"))){
     gs.l <- raster(paste(sdd, "growingseasons.tif", sep = "/"))
 }
 
+# ***************************************************************************
+
 #### data processing: core program indicators #### 
 ## rural, peri-urban, and urban population calculations ##
+
 if(!file.exists(paste(sdd, "rpu_designator.tif", sep = "/"))) {
-    GRUMP <- spatial_sync_raster(GRUMP, pop, method = "ngb")
-    vals <- unique(values(GRUMP))
+    GRUMP <- spatial_sync_raster(GRUMP, pop, method = "ngb") # sync GRUMP to pop
+    vals <- unique(values(GRUMP)) # pull out unique values
+    # create a new raster (GRUMP.u) that identifies ONLY urban areas
     recl <- matrix(c(vals, NA, NA, 2), ncol = 2)
     GRUMP.u <- reclassify(GRUMP, rcl = recl)
+    # identify peri-urban boundaries as cells in GRUMP.u that touch NA cells
     pu.des <- boundaries(GRUMP.u, directions = 4)
+    
+    # remove peri-urban boundaries from urban classification
     u.des <- GRUMP.u-pu.des
-    #add one to u.des s.t. r = 1, pu = 2, u = 3
+    # you now have a raster (u.des) with values: rural = NA, peri = 1, urban = 2
+    #add one to u.des so that r = NA, p = 2, u = 3
     u.des <- u.des + 1
-    rpu.des <- cover(u.des, GRUMP) # rural areas (NAs) remain 1s, p = 2 and u = 3
+  # Now, create RPU by overlaying p and u (2 and 3) onto original GRUMP
+    rpu.des <- cover(u.des, GRUMP) # rural areas (NAs) remain 1s, p=2 and u=3
+   # write to disk
     writeRaster(rpu.des, paste(sdd, "rpu_designator.tif", sep = "/"))
 } else{
     rpu.des <- raster(paste(sdd, "rpu_designator.tif", sep = "/"))
@@ -223,29 +253,34 @@ if(!file.exists(paste(sdd, "rpu_designator.tif", sep = "/"))) {
 ## take stack of rainfall data, split into months, calculate mean, save to lists
 ## to change the years for which we're calculating mean, change "yr" start & len
 if(!file.exists(paste(sdd, "r_vol/rvol_apr.tif", sep = "/"))) {
+    # yr is a sequence identifying each January throughout the stack
     yr <- seq.int(1, by = 12, len = floor(nlayers(r.stack)/12))
     months <- c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", 
                 "oct", "nov", "dec")
     
+    # create a loop identifying each month in turn, and create a stack per month
     for (i in 0:11) {
         if (i == 0) {
-            r.months <- list()
-            rm.months <- list()
+            r.months <- list() # create an empty list to hold each month's stack
+            rm.months <- list()# create an empty list to hold each month's mean
         }
         mon <- stack(r.stack@layers[yr + i])
-        r.months <- c(r.months, mon)
-        rm.months <- c(rm.months, mean(mon))
+        r.months <- c(r.months, mon) # add each months' stack to list
+        rm.months <- c(rm.months, mean(mon)) # add month's mean to list of means
     }
     rm(i)
     
     names(r.months) <- months; names(rm.months) <- months
     rain.m <- stack(rm.months)
     
-    ## calc volatility of rainfall, write raster object to "output/rain_vol"
+    ## create func to calc volatility of rainfall, 
+    ## write raster object to "output/rain_vol"
     r.vol <- function(r, rm) {
         vol <- sum(r < rm*0.7) / sum(!is.na(r)) # counts # of months rain was
         return(vol)                             #  <70% of mean, / by # months
-        } 
+    } 
+    
+    # run r.vol function over the each month's stack, stack results
     rain.v <- mapply(r.vol, r.months, rain.m) %>% stack()
     
     writeRaster(rain.v, paste(sdd, "r_vol/", sep = "/"), format = "GTiff",
@@ -267,7 +302,7 @@ if(!file.exists(paste(sdd, "r_vol/rvol_apr.tif", sep = "/"))) {
 
 ## population density
 if(!file.exists(paste(sdd, "pop.dense.tif", sep = "/"))) {
-    pop.dense <- pop/land_area
+    pop.dense <- pop/land_area 
     writeRaster(pop.dens, filename = paste(sdd, "pop.dense.tif", sep = "/"))
 } else {
     pop.dense <- raster(paste(sdd, "pop.dense.tif", sep = "/"))
@@ -275,20 +310,19 @@ if(!file.exists(paste(sdd, "pop.dense.tif", sep = "/"))) {
 
 ## est. avg. farm size
 # replace classifiers for cultivated land with values representing % of pixel
-# dedicated to cultivated land, make all other values "0"
+# dedicated to cultivated land, make all other values "0" 
+# ******this takes a SUPER long time *******
 if(!file.exists(paste(sdd, "crop_c.tif", sep = "/"))) {
-    repl <- data.frame(key = 
-                c(11, 14, 20, 30, 40, 50, 60, 70, 90, 100, 110, 120, 130, 
-                  140, 150, 160, 170, 180, 190, 200, 210, 220),
-                repl = c(1L, 1L, 0.8, 0.5, rep(0, 18)))
+repl <- data.frame(key = 
+            c(11, 14, 20, 30, 40, 50, 60, 70, 90, 100, 110, 120, 130, 
+              140, 150, 160, 170, 180, 190, 200, 210, 220),
+            repl = c(1L, 1L, 0.8, 0.5, rep(0, 18)))
     crop.c <- subs(lc, repl, filename = paste(sdd, "crop_c.tif", sep = "/"))
-    # note this takes a SUPER long time
 } else {
     crop.c <- raster(paste(sdd, "crop_c.tif", sep = "/"))
 }
-    
-# set crop pct geo stats equal to pop (pop res = 3x lc res)
 
+# aggreageate 300m land use data up to the level of population data (~1km)
 if(!file.exists(paste(sdd, "crop_pct.tif", sep = "/"))) {
        crop.pct <- aggregate(crop.c, fact = 3, fun = "mean", na.rm = TRUE, 
                              filename = paste(sdd, "crop_pct.tif", sep = "/")) 
@@ -296,27 +330,19 @@ if(!file.exists(paste(sdd, "crop_pct.tif", sep = "/"))) {
     crop.pct <- raster(paste(sdd, "crop_pct.tif", sep = "/"))
 }
 
+# calculate average farm isze
 if(!file.exists(paste(sdd, "av_farm_size.tif", sep = "/"))) {
     crop.pct <- spatial_sync_raster(crop.pct, pop)
-
     av.size <- (crop.pct * land_area) / hhs # sqkms per hh
     kms.to.acres <- 0.004046857 # number of sq kms in an acre
-    av.size <- av.size / kms.to.acres
+    av.size <- av.size / kms.to.acres # convert units to acres per household
     writeRaster(av.size, paste(sdd, "av_farm_size.tif", sep = "/"))
 } else {
     av.size <- raster(paste(sdd, "av_farm_size.tif", sep = "/"))
 }
 
-## Calculate percentage of each crop ##
-# crop.share <- ca.stack / land_area.raw
-
-#### prep data for leaflet and save to Shiny app data file ####
-
-# sync average farm size data to "pop" raster
-if(!file.exists(paste(sdd, "av_farm_size.tif", sep = "/"))) {
-av.size <- spatial_sync_raster(av.size, pop, method = "bilinear")
-    writeRaster(av.size, paste(sdd, "av_farm_size.tif", sep = "/"))
-}
+#### prep data for leaflet and save to Shiny app data directory ####
+# this may not need to be run
 
 # sync "% of land that is cropland" data to "pop" raster
 if(!file.exists(paste(sdd, "crop_pct.tif", sep = "/"))) {
@@ -346,6 +372,9 @@ if(!file.exists(paste(sdd, "lc.tif", sep = "/"))) {
     writeRaster(lc, paste(sdd, "lc.tif", sep = "/"))
 }
 
+# save data as an RData file
 save.image(file = paste(sdd, "cleanData.RData", sep = "/"))
+
+# output time of calculation
 duration <- Sys.time() - start; duration
 
