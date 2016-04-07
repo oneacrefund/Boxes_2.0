@@ -92,8 +92,9 @@ for(i in res.reqd) {
     # Create ID rasters for each resolution that will allow us to identify which
     # matrix cells to query for T/F tests
     ID_raster <- raster(all.agrasters[[1]])
-    ID_ratster[] <- 1:nc # raster where each cell value == cell index
-    
+    ID_raster[] <- 1:nc # raster where each cell value == cell index
+    writeRaster(ID_raster, paste(paste(dd, "resRasters", paste(i, "km", sep = ""), 
+                                       sep = "/"), "ID_raster.tif", sep = "/"))
 }
 
     
