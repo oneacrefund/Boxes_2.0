@@ -20,7 +20,7 @@ od <- paste(wd, "output", sep = "/")
 sdd <- "~/drive/Boxes_2.0/Shiny/data"
 ## libraries ##
 libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", "leaflet", 
-          "dplyr", "spatial.tools", "ff")
+          "dplyr", "spatial.tools", "ff", "shiny", "shinyBS")
 lapply(libs, require, character.only = TRUE)
 rm(libs)
 cat("\014")
@@ -248,6 +248,30 @@ if(!file.exists(paste(sdd, "rpu_designator.tif", sep = "/"))) {
     rpu.des <- raster(paste(sdd, "rpu_designator.tif", sep = "/"))
 }
 
+### define rural pop, peri pop, and urban pop as separate population layers
+
+## separate designator layer so that each classification has it's own layer  
+# rural
+recl <- matrix(c(1, 2, 3, 1, 0, 0), ncol = 2)
+r.des <- reclassify(rpu.des, rcl = reclassify)
+
+# peri
+recl <- matrix(c(1, 2, 3, 0, 1, 0), ncol = 2)
+p.des <- reclassify(rpu.des, rcl = reclassify)
+
+# urban
+recl <- matrix(c(1, 2, 3, 0, 0, 1), ncol = 2)
+u.des <- reclassify(rpu.des, rcl = reclassify)
+
+# multiply pop by each layer to get each population type, then stack
+r.pop <- r.des * pop
+p.pop <- p.des * pop
+u.pop <- u.des * pop
+popstack <- stack(r.pop, p.pop, u.pop)
+
+# write popstack to disk
+writeRaster(popstack, paste(dd, "resRasters", paste(1, "km/sum", sep = ""), sep = "/"),
+            format = "GTiff", bylayer = TRUE, suffix = "names")
 
 ## rainfall monthly mean ##
 ## take stack of rainfall data, split into months, calculate mean, save to lists
