@@ -12,11 +12,10 @@
 rm(list = ls()) # clear workspace
 
 # set up
-cd <- paste("~/drive/Boxes_2.0/Code files", sep = "/")
+cd <- paste("~/Boxes_2.0/Code files", sep = "/")
 source(paste(cd, "data_prep.r", sep = "/")) # source data prep file, which loads
 swd <- "~/drive/Boxes_2.0/Shiny"            # raw data files for aggregation
 dd <- paste(swd, "data", sep = "/")
-
 
 # create a list of rasters to be aggregated using "mean" function
 mean.rasters.raw <- list(av.size, rain.m, rain.v, pop.dense, slp, gs.l, elev, 
@@ -62,7 +61,7 @@ for(i in res.reqd) {
                format = "GTiff", bylayer = TRUE, suffix = "names")
     
     # stack all rasters together for translation into matrix
-    all.agrasters <- stack(sum.agrasters, mean.agrasters)
+    all.agrasters <- stack(sum.agrasters, mean.agrasters) 
     
 #### create a data matrix to hold all values for every layer. ####
 #### Rows = cells, Columns = layers                                                      
