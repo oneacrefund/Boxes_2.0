@@ -1,8 +1,9 @@
 # Boxes 2.0: UI script
 # Author: Colin Custer (colin.custer@oneacrefund.org)
+# Apprentice: Bernard Kiprop (bernard.kiprop@oneacrefund.org)
 # Description: UI tool for geospatial Shiny app
 # Date created: 29 Mar 2016
-# Date modified: 17 Jun 2016
+# Date modified: 20 Jun 2016
 
 
 # *****************************************************************************
@@ -18,13 +19,30 @@ shinyUI(fluidPage(
   theme = shinytheme("flatly"),
   titlePanel("OAF Geodata Repository"),
   fluidRow(
+    
     #Left panel of collapsible selectors for resolution, region and datasets
-    column(width = 5,
+    column(width = 6,
            h2("Select parameters here:"),
+           
+           # Test data for creating filters
+           bsCollapse(
+             id = "test", #open = "Test Datasets",
+             bsCollapsePanel(
+               "Test Datasets",
+               checkboxGroupInput(
+                 "testdata", label = "Test Datasets",
+                 choices = c(
+                   "Population (density)" = 1, #mean_pop.dense.tif
+                   "Population (total)" = 2, #sum_pop.tif
+                   "Est. avg. farm size" = 3, #mean_av.size.tif
+                   "Months of growing season" = 4 #mean_gs.l.tif
+                 ))
+             )),
            
            # Resoluton selector:
            bsCollapse(
-             open = "Select data resolution:", id = "res.sel",
+             #open = "Select data resolution:",
+             id = "res.sel",
              bsCollapsePanel(
                "Select data resolution:",
                sliderInput("res", label = "Resolution (sqkm)", value = 5, 
@@ -54,7 +72,7 @@ shinyUI(fluidPage(
                "Select data:",
                fluidRow(
                  column(
-                   width = 5, h4("All data"),
+                   width = 12, h4("All data"),
                    bsCollapse(
                      id = "all.dat", multiple = T,
                      bsCollapsePanel(
@@ -95,7 +113,7 @@ shinyUI(fluidPage(
                          )))
                    ),
                    column(
-                     width = 7, h4("Data bundles"),
+                     width = 12, h4("Data bundles"),
                      bsCollapse(
                        id = "", multiple = T,
                        bsCollapsePanel(
@@ -136,18 +154,48 @@ shinyUI(fluidPage(
                                  "Fertilizer consumption"
                                ))
                            )
+                           
                          ))
                      ))
                  ))
                
-             ))),
-    
-    # Right panel - map
-    # To-do: include an instructions page?
-    column(width = 7,
-           h4("The map displays here"),
-           mainPanel(leafletOutput("map"))
+             )),# Data selector portion ends here
+           
+           # Action Button: 'submits' data selection, collapses data selectors
+           #& shows filters
+           submitButton(text = "Submit"),
+           #actionButton("mapit", "Submit"),
+           
+           # Well panel that will display the filters:
+          wellPanel(
+           #fluidRow(
+           #conditionalPanel(
+             #condition = "input.testdata == 'Population (density)'",
+             uiOutput("filters1")
+             #sliderInput("pop_dense",label = "Population Density",
+              #           value = c(0, 500), step = 100, min = 0, max = 5700)
+             #),
+             ,
+            # conditionalPanel(
+              # condition = "input.testdata == 'Population (total)'",
+               uiOutput("filters2")
+#                sliderInput("pop_sum", label = "Total Population",
+#                            value = c(0, 2000), step = 500, min = 0, max = 1e6)
+             )
+             
+          # )
+           ),
+           
+           
+           # Right panel - map
+           # To-do: include an instructions page?
+           column(width = 6,
+                  h4("The map displays here"),
+                  textOutput("txt"),
+                  textOutput("txt2"),
+                  mainPanel(leafletOutput("map"))
+           )
     )
-  )
-))
-
+  ))
+  
+  
