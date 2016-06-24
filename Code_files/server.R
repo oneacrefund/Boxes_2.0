@@ -31,9 +31,9 @@ bpath <- paste(cd, "borders", sep = "/")
 # *****************************************************************************
 #### FUNCTIONS:
 # Function that creates a file path for laoding data
-chooseRes <- function (km) {
-  km <- as.character(substitute(km))
-  pth <- paste(dd, km, sep = "/")
+chooseRes <- function (n) {
+  n <- as.character(n)
+  pth <- paste(dd, paste(n, "km", sep = ""), sep = "/")
   return (pth)
 }
 
@@ -42,7 +42,6 @@ dtList <- c("mean_pop.dense.tif", "sum_pop.tif", "mean_av.size.tif",
             "mean_gs.l.tif")
 
 getNames <- function (ch){
-
   if(length(ch) == 0) {
     return()
   }
@@ -53,19 +52,20 @@ getNames <- function (ch){
   return(d)
 }
 
-
-# Function that loads the data and puts in a list
+# Function that loads the data and puts in a list (for easy access
+# and manipulation)
 loadDat <- function (x, toLoad) {
-  pth <- chooseRes(x)
+  #pth <- chooseRes(x)
   #toLoad <- list.files(pth, "*.tif")
   for (i in 1:length(toLoad)) {
-    #r <- raster(paste(pth, toLoad, sep = "/"))
-    r <- raster(paste(pth, toLoad[i], sep = "/"))
+    r <- raster(paste(x, toLoad[i], sep = "/"))
     a <- list()
     a[[length(a) + 1]] <- assign(toLoad[i],r)
     return (a)
+    #return(r)
   }
 }
+
 # Function that crops data to chosen region, and returns a new list
 crpDat <- function (a) {
   
@@ -76,34 +76,43 @@ crpDat <- function (a) {
 shinyServer(function(input, output, session) {
   
   ## Get selected resolution
-  x <- reactive({input$res})
+  #x <- reactive({input$res})
   
   ## Get selected border:
   bdr <- reactive({input$geo})
   
   ## Get selected datasets:
-  output$txt <- renderText(getNames(input$testdata))
-  output$txt2 <- renderText(input$res)
+  #output$txt <- renderText(getNames(input$testdata))
+  #output$txt2 <- renderText(chooseRes(input$res))
   
-  y <- reactive({
-    a <- getNames(input$testdata)
-    return (a) })
- 
-  loadDat(x, y())
+  # Load selected data:
+  loadDat1 <- reactive ({
+    dt <- input$testdata
+    dt <- getNames(dt)
+    pth <- chooseRes(input$res)
+    a <- loadDat(pth, dt)
+    return(a[[length(a)]])
+    #w <- paste(pth, dt[length(dt)], sep = "/")
+    #return (w)
+  })
+  
+  #output$txt <- renderText(loadDat1())
+  
+  isolate({
+   output$map <- renderLeaflet({
+     loadDat1()
+     progress <- shiny::Progress$new()   
+     on.exit(progress$close())
+     progress$set(message = "Drawing Map -- say yaay when you see it", value = 0)
+     })
+  })
+  #loadDat(x, y())
   #loadDat(as.character(input$res), getNames(input$testdata))
-#    a <- reactive({getNames(input$testdata)})
-#   
-#     for(i in 1:length(a)) {
-#      output$txt <- renderText(a[[i]])
-#    }
-
-
-  ## Load selected datasets:
-  #ld <- reactive(input$mapit,{
-  #  loadDat(x, "mean_av.size.tif")  
-  #})
-  
-  # output$text <- renderText(tld.1[[1]])
+  #    a <- reactive({getNames(input$testdata)})
+  #   
+  #     for(i in 1:length(a)) {
+  #      output$txt <- renderText(a[[i]])
+  #    }
   
   ## Paint base map
   # output$map <- renderLeaflet({ leaflet() %>% addProviderTiles("MapQuestOpen.Aerial") %>% 

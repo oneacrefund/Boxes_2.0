@@ -21,8 +21,8 @@ shinyUI(fluidPage(
   fluidRow(
     
     #Left panel of collapsible selectors for resolution, region and datasets
-    column(width = 6,
-           h2("Select parameters here:"),
+    column(width = 4,
+           h3("Select parameters here:"),
            
            # Test data for creating filters
            bsCollapse(
@@ -189,11 +189,12 @@ shinyUI(fluidPage(
            
            # Right panel - map
            # To-do: include an instructions page?
-           column(width = 6,
+           column(width = 8,
                   h4("The map displays here"),
                   textOutput("txt"),
                   textOutput("txt2"),
-                  mainPanel(leafletOutput("map"))
+                  mainPanel(leafletOutput("map")),
+                  h4("Can you see the map?")
            )
     )
   ))
