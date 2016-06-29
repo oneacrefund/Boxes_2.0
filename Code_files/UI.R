@@ -167,36 +167,26 @@ shinyUI(fluidPage(
            #actionButton("mapit", "Submit"),
            
            # Well panel that will display the filters:
-          wellPanel(
-           #fluidRow(
-           #conditionalPanel(
-             #condition = "input.testdata == 'Population (density)'",
-             uiOutput("filters1")
-             #sliderInput("pop_dense",label = "Population Density",
-              #           value = c(0, 500), step = 100, min = 0, max = 5700)
-             #),
-             ,
-            # conditionalPanel(
-              # condition = "input.testdata == 'Population (total)'",
-               uiOutput("filters2")
-#                sliderInput("pop_sum", label = "Total Population",
-#                            value = c(0, 2000), step = 500, min = 0, max = 1e6)
-             )
-             
-          # )
-           ),
-           
-           
-           # Right panel - map
-           # To-do: include an instructions page?
-           column(width = 8,
-                  h4("The map displays here"),
-                  textOutput("txt"),
-                  textOutput("txt2"),
-                  mainPanel(leafletOutput("map")),
-                  h4("Can you see the map?")
+           wellPanel(
+             uiOutput("filters1"),
+             uiOutput("filters2"),
+             uiOutput("filters3"),
+             uiOutput("filters4")
            )
+    ),
+    
+    
+    # Right panel - map
+    # To-do: include an instructions page?
+    column(width = 8,
+           h4("The map displays here"),
+           #fillPage(
+           #fillRow( 
+           #textOutput("txt"),
+           #textOutput("txt2"),
+           mainPanel(leafletOutput("map", height = "100%"))
+           #h4("Can you see the map?")
     )
-  ))
-  
-  
+  )
+))
+

@@ -26,7 +26,8 @@ dd <- paste(cd, "resRasters2", sep = "/")
 bpath <- paste(cd, "borders", sep = "/")
 
 ## Load shapefiles
-
+ssa <- readOGR(dsn = bpath, layer = "all_ssa")
+coreOAF <- readOGR(dsn = bpath, layer = "OAF_core")
 
 # *****************************************************************************
 #### FUNCTIONS:
@@ -38,7 +39,7 @@ chooseRes <- function (n) {
 }
 
 # Function that matches the checkboxgroup input to names in the checkbox input:
-dtList <- c("mean_pop.dense.tif", "sum_pop.tif", "mean_av.size.tif",
+dtList <- c("mean_r.pop.tif", "sum_pop.tif", "mean_av.size.tif",
             "mean_gs.l.tif")
 
 getNames <- function (ch){
@@ -48,21 +49,28 @@ getNames <- function (ch){
   d <- character()
   for(i in 1:length(ch)){
     d[(length(d)) + 1] <- dtList[as.numeric(ch[i])]
+    
   }
   return(d)
 }
 
 # Function that loads the data and puts in a list (for easy access
 # and manipulation)
-loadDat <- function (x, toLoad) {
+# Takes in a default border but possible to specify border when calling
+loadDat <- function (x, toLoad, bd = coreOAF) {
   #pth <- chooseRes(x)
   #toLoad <- list.files(pth, "*.tif")
   for (i in 1:length(toLoad)) {
+    print("selected: "); print(length(toLoad))
     r <- raster(paste(x, toLoad[i], sep = "/"))
+    r <- crop(r, bd)
+    r <- mask(r, bd)
     a <- list()
     a[[length(a) + 1]] <- assign(toLoad[i],r)
+    #print("created: "); print(length(a))
     return (a)
-    #return(r)
+    print("done")
+    
   }
 }
 
@@ -71,128 +79,86 @@ crpDat <- function (a) {
   
 }
 
-# *****************************************************************************
+
+#### ***************************************************************************
+
+
 #### SERVER:
 shinyServer(function(input, output, session) {
-  
-  ## Get selected resolution
-  #x <- reactive({input$res})
   
   ## Get selected border:
   bdr <- reactive({input$geo})
   
-  ## Get selected datasets:
-  #output$txt <- renderText(getNames(input$testdata))
-  #output$txt2 <- renderText(chooseRes(input$res))
-  
-  # Load selected data:
-  loadDat1 <- reactive ({
+  ## Load selected data:
+  isolate({ loadDat1 <- reactive ({
     dt <- input$testdata
     dt <- getNames(dt)
     pth <- chooseRes(input$res)
     a <- loadDat(pth, dt)
-    return(a[[length(a)]])
+    return(a)
     #w <- paste(pth, dt[length(dt)], sep = "/")
     #return (w)
-  })
+  }) })
   
   #output$txt <- renderText(loadDat1())
   
   isolate({
-   output$map <- renderLeaflet({
-     loadDat1()
-     progress <- shiny::Progress$new()   
-     on.exit(progress$close())
-     progress$set(message = "Drawing Map -- say yaay when you see it", value = 0)
-     })
+    output$map <- renderLeaflet({
+      dt.1 <- loadDat1()
+      print(length(dt.1)); print("avail for painting")
+      #plot(dt[[1]])
+      progress <- shiny::Progress$new()
+      on.exit(progress$close())
+      progress$set(message = "Drawing Map -- say yaay when you see it", value = 0)     
+      
+      r <- dt.1[[length(dt.1)]]
+      pal1 <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(r),
+                          na.color = "transparent")
+      
+      leaflet() %>% addTiles() %>% #colors = "Spectral"
+        addRasterImage(r, colors = "Spectral", opacity = 0.7) #%>%
+      # addLegend(pal = pal1, position = "bottomright", values = values(r),
+       #          title = names(r))
+      print("Done")
+    })
   })
-  #loadDat(x, y())
-  #loadDat(as.character(input$res), getNames(input$testdata))
-  #    a <- reactive({getNames(input$testdata)})
-  #   
-  #     for(i in 1:length(a)) {
-  #      output$txt <- renderText(a[[i]])
-  #    }
+  
+  
   
   ## Paint base map
   # output$map <- renderLeaflet({ leaflet() %>% addProviderTiles("MapQuestOpen.Aerial") %>% 
   #  setView(22.66, 7.961, 3) })
   
+  
   ## Create filters for selected datasets
   
-  #   test.filt <- reactive({
-  #     if(is.null(input$test)) {
-  #       return()
-  #     }
-  #     else {
-  #       #if(input$test == "Population (density)") {
-  #         sliderInput("pop_dense", label = "Population Density",
-  #                     value = c(0, 500), step = 100, min = 0, max = 800)
-  #      # }
-  #       if(input$test == "Population (total)"){
-  #         sliderInput("pop_sum", label = "Total Population",
-  #                     value = c(0, 2000), step = 500, min = 0, max = 1e6)
-  #       }
-  #     }
-  #   })
-  
-  ## Display filters using renderUI, based on checked boxes
-  #   output$filters <-  renderUI ({
-  #     # Start with test filters; ranges are not true
-  #     if(is.null(input$test)) {
-  #       return()
-  #     }
-  #     
-  #     if (input$testdata == "Population (density)") {
-  #       sliderInput("pop_dense",label = "Population Density",
-  #                   value = c(0, 500), step = 100, min = 0, max = 5700)
-  #     }
-  #     
-  #     if (input$testdata == "Population (total)") {
-  #       sliderInput("pop_sum", label = "Total Population",
-  #                   value = c(0, 2000), step = 500, min = 0, max = 1e6)
-  #     }
-  #     
-  #     if (input$testdata == "Est. avg. farm size") {
-  #       sliderInput("av_farm", label = "Average Farm Size",
-  #                   value = c(0, 100), step = 50, min = 0, max = 5e4)
-  #     }
-  #     
-  #   })
   output$filters1 <- renderUI ({
     conditionalPanel(
-      #condition = "input.testdata == 'Population (density)'",
-      condition = "input.testdata == 1",
+      condition = "input.testdata.includes('1')",
       sliderInput("pop_dense",label = "Population Density",
                   value = c(0, 500), step = 100, min = 0, max = 5700))
   })
   
   output$filters2 <- renderUI ({
     conditionalPanel(
-      #condition = "input.testdata == 'Population (total)'",
-      condition = "input.testdata == 2",
+      condition = "input.testdata.includes('2')",
       sliderInput("pop_sum", label = "Total Population",
                   value = c(0, 2000), step = 500, min = 0, max = 1e6))
   })
   
+  output$filters3 <- renderUI ({
+    conditionalPanel(
+      condition = "input.testdata.includes('3')",
+      sliderInput("pop_sum", label = "Average Land Size/Farm",
+                  value = c(0, 10), step = 0.5, min = 0, max = 10))
+  })
   
-  #   
-  
-  
-  
-  #     switch(input$testdata,
-  #            "Population (density)" = 
-  #              sliderInput("pop_dense",label = "Population Density",
-  #                          value = c(0, 500), step = 100, min = 0, max = 5700),
-  #            "Population (total)" = 
-  #              sliderInput("pop_sum", label = "Total Population",
-  #                          value = c(0, 2000), step = 500, min = 0, max = 1e6),
-  #            "Est. avg. farm size" = 
-  #              sliderInput("av_farm", label = "Average Farm Size",
-  #                          value = c(0, 100), step = 50, min = 0, max = 5e4)
-  #            
-  #     )
-  
+  output$filters4 <- renderUI ({
+    conditionalPanel(
+      condition = "input.testdata.includes('4')",
+      sliderInput("pop_sum", label = "Months of Growing Season",
+                  value = c(0, 12), step = 1, min = 0, max = 12))
+  })
   
   
 }) # Server input/output ends here
