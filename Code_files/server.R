@@ -60,18 +60,20 @@ getNames <- function (ch){
 loadDat <- function (x, toLoad, bd = coreOAF) {
   #pth <- chooseRes(x)
   #toLoad <- list.files(pth, "*.tif")
+  a <- list()
+  print("selected: "); print(length(toLoad))
+  count <- 1
   for (i in 1:length(toLoad)) {
-    print("selected: "); print(length(toLoad))
     r <- raster(paste(x, toLoad[i], sep = "/"))
     r <- crop(r, bd)
     r <- mask(r, bd)
-    a <- list()
     a[[length(a) + 1]] <- assign(toLoad[i],r)
+    count <- count + 1
     #print("created: "); print(length(a))
-    return (a)
-    print("done")
-    
   }
+  print("created: "); print(length(a))
+  print("count: "); print(count)
+  return (a)
 }
 
 # Function that crops data to chosen region, and returns a new list
@@ -107,18 +109,19 @@ shinyServer(function(input, output, session) {
       dt.1 <- loadDat1()
       print(length(dt.1)); print("avail for painting")
       #plot(dt[[1]])
+      
       progress <- shiny::Progress$new()
       on.exit(progress$close())
       progress$set(message = "Drawing Map -- say yaay when you see it", value = 0)     
       
       r <- dt.1[[length(dt.1)]]
       pal1 <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(r),
-                          na.color = "transparent")
+                           na.color = "transparent")
       
       leaflet() %>% addTiles() %>% #colors = "Spectral"
         addRasterImage(r, colors = "Spectral", opacity = 0.7) #%>%
       # addLegend(pal = pal1, position = "bottomright", values = values(r),
-       #          title = names(r))
+      #          title = names(r))
       print("Done")
     })
   })
