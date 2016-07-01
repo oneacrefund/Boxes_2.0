@@ -2,7 +2,7 @@
 # Author: Colin Custer (colin.custer@oneacrefund.org)
 # Apprentice: Bernard Kiprop (bernard.kiprop@oneacrefund.org)
 # Description: Back-end server script for Shiny app
-# Date last  modified: 14 Jun 2016
+# Date last  modified: 01 Jul 2016
 
 
 # *****************************************************************************
@@ -28,7 +28,6 @@ bpath <- paste(cd, "borders", sep = "/")
 ## Load shapefiles
 ssa <- readOGR(dsn = bpath, layer = "all_ssa")
 coreOAF <- readOGR(dsn = bpath, layer = "OAF_core")
-
 # *****************************************************************************
 #### FUNCTIONS:
 # Function that creates a file path for laoding data
@@ -57,18 +56,17 @@ getNames <- function (ch){
 # Function that loads the data and puts in a list (for easy access
 # and manipulation)
 # Takes in a default border but possible to specify border when calling
-loadDat <- function (x, toLoad, bd = coreOAF) {
+loadDat <- function (x, toLoad) {
   #pth <- chooseRes(x)
   #toLoad <- list.files(pth, "*.tif")
   a <- list()
   print("selected: "); print(length(toLoad))
-  count <- 1
+  
   for (i in 1:length(toLoad)) {
     r <- raster(paste(x, toLoad[i], sep = "/"))
-    r <- crop(r, bd)
-    r <- mask(r, bd)
+    r <- crpDat(r)
+    #r <- mask(r, bd)
     a[[length(a) + 1]] <- assign(toLoad[i],r)
-    count <- count + 1
     #print("created: "); print(length(a))
   }
   print("created: "); print(length(a))
@@ -77,8 +75,10 @@ loadDat <- function (x, toLoad, bd = coreOAF) {
 }
 
 # Function that crops data to chosen region, and returns a new list
-crpDat <- function (a) {
-  
+crpDat <- function (a, bd = coreOAF) {
+  r.1 <- crop(a,bd)
+  r.1 <- mask(r.1, bd)
+  return(r.1)
 }
 
 
@@ -103,30 +103,33 @@ shinyServer(function(input, output, session) {
   }) })
   
   #output$txt <- renderText(loadDat1())
-  
-  isolate({
+
+  #isolate({
     output$map <- renderLeaflet({
-      dt.1 <- loadDat1()
-      print(length(dt.1)); print("avail for painting")
-      #plot(dt[[1]])
+      dt <- loadDat1()
+      print(length(dt)); print("avail for painting")
+      r <- dt[[length(dt)]]
+      #plot(r)
       
       progress <- shiny::Progress$new()
       on.exit(progress$close())
-      progress$set(message = "Drawing Map -- say yaay when you see it", value = 0)     
+      progress$set(message = "Drawing Map -- say yaay when you see it", value = 0)
       
-      r <- dt.1[[length(dt.1)]]
       pal1 <- colorNumeric(c("#0C2C84", "#41B6C4", "#FFFFCC"), values(r),
                            na.color = "transparent")
       
-      leaflet() %>% addTiles() %>% #colors = "Spectral"
-        addRasterImage(r, colors = "Spectral", opacity = 0.7) #%>%
+      leaflet() %>% addTiles() %>%  addRasterImage(r, opacity = 0.5)
+      #  addLegend(position = "topright", colors = pal1)
+      
+      
+ 
       # addLegend(pal = pal1, position = "bottomright", values = values(r),
       #          title = names(r))
-      print("Done")
+    #  print("Done")
     })
-  })
+  #})
   
-  
+
   
   ## Paint base map
   # output$map <- renderLeaflet({ leaflet() %>% addProviderTiles("MapQuestOpen.Aerial") %>% 
@@ -134,6 +137,7 @@ shinyServer(function(input, output, session) {
   
   
   ## Create filters for selected datasets
+  # To-do: auto-generate the filters for selected datasets instead
   
   output$filters1 <- renderUI ({
     conditionalPanel(
