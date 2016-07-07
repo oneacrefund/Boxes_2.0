@@ -62,7 +62,7 @@ shinyUI(fluidPage(
                    "Central Africa",
                    "South Africa",
                    "West Africa", "OAF - All", "OAF - Core", "SSA"),
-                 selected = "SSA"
+                 selected = "OAF - Core"
                ))),
            
            #Data selector:
@@ -164,9 +164,8 @@ shinyUI(fluidPage(
            # Action Button: 'submits' data selection, collapses data selectors
            #& shows filters
            submitButton(text = "Submit"),
-           #actionButton("mapit", "Submit"),
            
-           # Well panel that will display the filters:
+           # Well panel for filters
            wellPanel(
              uiOutput("filters1"),
              uiOutput("filters2"),
@@ -174,19 +173,16 @@ shinyUI(fluidPage(
              uiOutput("filters4")
            )
     ),
-    
+
     
     # Right panel - map
-    # To-do: include an instructions page?
+    # To-do: include a description tab
     column(width = 8,
            h4("The map displays here"),
-           #fillPage(
-           #fillRow( 
-           #textOutput("txt"),
-           #textOutput("txt2"),
-           mainPanel(leafletOutput("map", height = "100%"))
+#            textOutput("txt"),
+#            textOutput("txt2"),
+           mainPanel(leafletOutput("map"))
            #h4("Can you see the map?")
     )
   )
 ))
-
