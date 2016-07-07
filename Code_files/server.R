@@ -2,7 +2,7 @@
 # Author: Colin Custer (colin.custer@oneacrefund.org)
 # Apprentice: Bernard Kiprop (bernard.kiprop@oneacrefund.org)
 # Description: Back-end server script for Shiny app
-# Date last  modified: 04 Jul 2016
+# Date last  modified: 07 Jul 2016
 
 
 # *****************************************************************************
@@ -10,8 +10,10 @@
 ## it should be moved to a Shiny directory when finished. 
 
 # *****************************************************************************
+##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#### SET-UP: (DON'T copy this to the upload script!!!!!!!!!)
+##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-#### SET-UP:
 rm(list = ls()); cat("\014")
 
 libs <- c("rgdal", "tidyr", "rgeos", "raster", "tiff", "ggplot2", "leaflet", 
@@ -34,6 +36,9 @@ west <- readOGR(dsn = bpath, layer = "WestAfricaBorder")
 south <- readOGR(dsn = bpath, layer = "SouthAfricaBorder")
 allOAF <- readOGR(dsn = bpath, layer = "OAF_all")
 
+## Load filter ranges (now only 5km and 10 km to test):
+f.range <- read.csv(paste(cd, "filter_ranges_sub.csv", sep = "/"))
+
 # *****************************************************************************
 #### FUNCTIONS:
 
@@ -44,8 +49,10 @@ chooseRes <- function (n) {
   return (pth)
 }
 
+## Test filter data here:
+
 ## Function that matches the checkboxgroup input to number values from the checkbox input:
-dtList <- c("mean_r.pop.tif", "sum_pop.tif", "mean_av.size.tif",
+dtList <- c("sum_pop.tif", "sum_hhs.tif", "sum_prod_maize.tif",
             "mean_gs.l.tif")
 
 getNames <- function (ch){
@@ -65,6 +72,27 @@ crpDat <- function (a, bd = coreOAF) {
   r.1 <- crop(a,bd)
   r.1 <- mask(r.1, bd)
   return(r.1)
+}
+
+
+#================================================================================
+## Function that loads the data and puts in a list (for easy access
+# and manipulation)
+loadDat <- function (x, toLoad) {
+  #pth <- chooseRes(x)
+  #toLoad <- list.files(pth, "*.tif")
+  a <- list()
+  print("selected: "); print(length(toLoad))
+  
+  for (i in 1:length(toLoad)) {
+    r <- raster(paste(x, toLoad[i], sep = "/"))
+    r <- crpDat(r)
+    #r <- mask(r, bd)
+    a[[length(a) + 1]] <- assign(toLoad[i],r)
+    #print("created: "); print(length(a))
+  }
+  print("created: "); print(length(a))
+  return (a)
 }
 
 #================================================================================
@@ -87,9 +115,11 @@ getStack <- function (rastlist, rastfil) {
     x <- getBool(rastlist[[i]], rastfil[[i]])
     bools[[length(bools) + 1]] <- x
   }
+  pr.3 <- paste(length(bools), "is the # of rasters to stack"); print(pr.3)
   #return (bools)
   bool.1 <- lapply(bools, prod)
-  pr.2 <- paste(class(bool.1), "- class of new raster; makes sense?"); print(pr.2)
+  #bool.1 <- apply(bools, "prod")
+  pr.2 <- paste(length(bool.1), "- length of stack list"); print(pr.2)
   return(bool.1)
 }
 
@@ -100,27 +130,6 @@ getStack <- function (rastlist, rastfil) {
 #   rsMerged <- lapply(a,)
 #   return(rsMerged)
 # }
-
-
-#================================================================================
-## Function that loads the data and puts in a list (for easy access
-# and manipulation)
-loadDat <- function (x, toLoad) {
-  #pth <- chooseRes(x)
-  #toLoad <- list.files(pth, "*.tif")
-  a <- list()
-  print("selected: "); print(length(toLoad))
-  
-  for (i in 1:length(toLoad)) {
-    r <- raster(paste(x, toLoad[i], sep = "/"))
-    r <- crpDat(r)
-    #r <- mask(r, bd)
-    a[[length(a) + 1]] <- assign(toLoad[i],r)
-    #print("created: "); print(length(a))
-  }
-  print("created: "); print(length(a))
-  return (a)
-}
 
 #### ***************************************************************************
 
@@ -178,26 +187,27 @@ shinyServer(function(input, output, session) {
   
   ## Create filters for selected datasets
   # To-do: auto-generate the filters for selected datasets instead
+  # To-do2: filter ranges
   
   output$filters1 <- renderUI ({
     conditionalPanel(
       condition = "input.testdata.includes('1')",
-      sliderInput("pop_dense",label = "Population Density",
-                  value = c(0, 500), step = 100, min = 0, max = 5700))
+      sliderInput("pop_sum",label = "Total Population",
+                  value = c(0, 1e5), step = 5e3, min = 0, max = 6e5))
   })
   
   output$filters2 <- renderUI ({
     conditionalPanel(
       condition = "input.testdata.includes('2')",
-      sliderInput("pop_sum", label = "Total Population",
-                  value = c(0, 2000), step = 500, min = 0, max = 1e6))
+      sliderInput("hhs_sum", label = "Total Households",
+                  value = c(0, 100), step = 50, min = 0, max = 11e4))
   })
   
   output$filters3 <- renderUI ({
     conditionalPanel(
       condition = "input.testdata.includes('3')",
-      sliderInput("av_land", label = "Average Land Size/Farm",
-                  value = c(0, 10), step = 0.5, min = 0, max = 10))
+      sliderInput("maize_sum", label = "Maize production (total)",
+                  value = c(0, 2e3), step = 5e3, min = 0, max = 2e5))
   })
   
   output$filters4 <- renderUI ({
@@ -214,16 +224,16 @@ shinyServer(function(input, output, session) {
   # single 1/NA raster for painting:
   getMerged <- reactive ({
     # Take filters and put in a list:
-    pop.filt <- input$pop_dense; popt.filt <- input$pop_sum
-    land.filt <- input$av_land; seasons.filt <- input$seasons
+    pop.filt <- input$pop_sum; popt.filt <- input$hhs_sum
+    land.filt <- input$maize_sum; seasons.filt <- input$seasons
     filtl <- list(pop.filt, popt.filt, land.filt, seasons.filt)
-    print(filtl[[1]]); print(class(filtl[[1]]));print(length(filtl[[1]])); print("Just printed first filter")
-    a <- length(filtl); b <- paste("Filters: ", a); print(b)
+    #print(filtl[[1]]); print(class(filtl[[1]]));print(length(filtl[[1]])); print("Just printed first filter")
+    #a <- length(filtl); b <- paste("Filters: ", a); print(b)
     
     # Get selected datasets:
     dt <- loadDat1()
     
-    # Pick only filters
+    # Pick only filters whose data was loaded
     ld <- input$testdata
     filtl.1 <- list() # Create a new list called filtl.1
     # Now only pick out filters from filtl that match selected data
@@ -231,6 +241,10 @@ shinyServer(function(input, output, session) {
       filtl.1[[length(filtl.1) + 1]] <- filtl[[as.numeric(ld[i])]]
     }
     print(length(filtl.1)); print("Those are the new filters, number of")
+    print("Printing all filters, check with selected data")
+    for (i in 1:length(filtl.1)){
+      print(filtl.1[[i]])
+    }
     
     mgd <- getStack(dt, filtl.1)
     print("class of stack: "); print(class(mgd))
@@ -241,13 +255,45 @@ shinyServer(function(input, output, session) {
   ## Paint merged raster to show boxes
   output$map <- renderLeaflet({
     spMerged.1 <- getMerged()
-    spMerged <- spMerged.1[[1]] 
+    pr <- paste("Items returned from merge:", length(spMerged.1)); print(pr)
+    #x.1 <- spMerged.1[[1]]
+    #x.2 <- spMerged.1[[2]]
+    #spMerged <- x.1 * x.2
+    spMerged <- spMerged.1[[1]]
     # If we provide a palette it tries to use multiple colors?
-    pal1 <- colorNumeric("#0C2C84",domain = values(spMerged),
+    pal1 <- colorNumeric("#006400",domain = values(spMerged),
                          na.color =  "#00000000")
     leaflet() %>% addTiles() %>%  addRasterImage(spMerged, opacity = 0.5,
                                                  colors = pal1, project = T)
   })
+  #-----------------------------------------------------------------------------
+  ### Dynamically altering filter ranges based on resolution
+  
+  observe ({
+    n <- as.character(input$res)
+    n.1 <- paste("km", 5, sep = "")
+    lcol <- paste(n.1, "min", sep = "_")
+    ucol <- paste(n.1, "max", sep = "")
+    
+   min = f.range[,lcol] 
+    updateSliderInput("pop_sum", min = 400, max = 500)
+    updateSliderInput("hhs_sum", min = 400, max = 500)
+    updateSliderInput("maize_sum", min = 400, max = 500)
+    updateSliderInput("seasons", min = 400, max = 500)
+    
+  })
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   
 }) # Server input/output ends here
 

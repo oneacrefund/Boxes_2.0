@@ -32,9 +32,9 @@ shinyUI(fluidPage(
                checkboxGroupInput(
                  "testdata", label = "Test Datasets",
                  choices = c(
-                   "Population (density)" = 1, #mean_pop.dense.tif
-                   "Population (total)" = 2, #sum_pop.tif
-                   "Est. avg. farm size" = 3, #mean_av.size.tif
+                   "Population (total)" = 1, #sum_pop.tif
+                   "Number of households" = 2, #mean_hhs.tif
+                   "Total maize production" = 3, #sum_prod_maize.tif
                    "Months of growing season" = 4 #mean_gs.l.tif
                  ))
              )),
@@ -46,7 +46,7 @@ shinyUI(fluidPage(
              bsCollapsePanel(
                "Select data resolution:",
                sliderInput("res", label = "Resolution (sqkm)", value = 5, 
-                           min = 0, step = 5, max = 80, round = 2, post = "km")
+                           min = 0, step = 5, max = 10, round = 2, post = "km")
                # TODO: make rounding to nearest 5 work
              )),
            
