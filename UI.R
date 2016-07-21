@@ -48,9 +48,9 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
                 # input data by variable
                 column(width = 6, 
                   h5(strong("All data"), align = "center"),
-                  uiOutput("select_all_data"),
-                  em("* = missing data currently", 
-                    style = "color:blue")
+                  uiOutput("select_all_data")
+                  #em("* = missing data currently", 
+                   # style = "color:blue")
                 ),
                 # input data by bundle
                 column(width = 6, 
@@ -72,7 +72,7 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
                       # bk: to help with debugging,
                     )
                   ),
-                  em("Note: data bundle loading is not yet functional", 
+                  em("Note: data bundle loading by team is not yet functional", 
                     style = "color:blue")
                 )
               )
@@ -115,10 +115,10 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
               fluidRow(
                 column(width = 6,
                   actionButton("submit.data",
-                    label = "Done selecting data? Generate your map!")
+                    label = "Done selecting data? Click Me!")
                 ),
                 column(width = 6,
-                  actionButton("download.data",
+                  downloadButton("download.data",
                     label = "Download Data")
                 ), br(),
                 # TO DO: make this helpText pop up only after submit.data is clicked 
@@ -143,9 +143,16 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
               uiOutput("filters_rain1"),
               uiOutput("filters_rain2"),
               uiOutput("filters_pop_type"),
-              uiOutput("filters_fert"),
               uiOutput("filters_soil_c"),
-              uiOutput("filters_soil_n")
+              uiOutput("filters_soil_n"),
+              actionButton("refresh.map", label = "Generate Map"),
+              br(),
+              helpText(em(strong("Hint"), 
+                br(), "Adjust the filters above to your desired ranges",
+                br(), "Once done, hit the above button to get your map",
+                br(), "After you hit the button, it takes ~5s to load each dataset.",
+                br(), " - You can see how many data sets have been loaded thus far in the top-right corner.",
+                br(), " - Thanks for your patience!"))
             ),
             mainPanel(
               leafletOutput("map")    

@@ -24,6 +24,7 @@ coreOAF <- readOGR(dsn = bpath, layer = "OAF_core")
 getNames <- function(inputs, setting) {
   # TO DO: add data validation for "setting" parameter
   toLoad <- inputs %>% base::unique()
+  print("bbbbbbb"); print(toLoad)
   if("mean_rm" %in% toLoad) {
     if(setting == "make.filters") { addRain <- NA } 
     else if(setting == "call.filters") { 
@@ -57,7 +58,7 @@ getNames <- function(inputs, setting) {
   # TO DO: add conditional adjustments for N soil fertility
   
   # remove any NAs
-  toLoad <- toLoad[!is.na(toLoad)]
+  toLoad <- toLoad[!is.na(toLoad)]; print("+++++++++++++++++++"); print(toLoad)
   return(toLoad)
 }
 
@@ -74,7 +75,7 @@ loadDat <- function(path, toLoad, bdr) {
       r <- raster(paste(path, paste0(toLoad[i], ".tif"), sep = "/"))
       # crop the data according to a selected extent
       r <- crpDat(r, bdr)
-      print("Here's raster"); print(r)
+      #print("Here's raster"); print(r)
       # plop the resultant cropped data into the list
       a[[length(a) + 1]] <- assign(toLoad[i],r)
       print("So far loaded: "); print(length(a))
@@ -116,7 +117,7 @@ getRange <- function (nm, res) {
 ## Function that takes in a raster and filters and returns an equivalent size
 # raster with 1s and NAs
 getBool <- function(rast, rastfil) {
-  # print("rrrrrrrrr"); print(rast); print(rastfil[[1]])
+  print("rrrrrrrrr"); print(rastfil[[1]]); print(rastfil[[2]])
   rast$filt <- (rast >= rastfil[[1]] & rast <= rastfil[[2]])
   rast$filt[rast$filt == T] <- 1
   rast$filt[rast$filt == F] <- NA
@@ -135,7 +136,7 @@ getStack <- function(rastlist, rastfil) {
   pr.3 <- paste(length(bools), "is the # of rasters to stack"); print(pr.3)
   bool.1 <- stack(bools)
   print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-  print("stacked "); print(length(bool.1)); print(str(bool.1))
+  print("stacked "); print(length(bool.1))#; print(str(bool.1))
   bool.1 <- calc(bool.1, fun = prod)
   pr.2 <- paste(length(bool.1), "- length of stack list"); print(pr.2)
   return(bool.1)
@@ -162,7 +163,7 @@ crop.data.choices <- c(
 
 other.data.choices <- c( 
   #(note for BK: consumption === fertilizer usage; fertility === NPK soil content)
-  "Soil fertility (nitrogen g/kg)*" = "mean_soil.n.", 
+ # "Soil fertility (nitrogen g/kg)*" = "mean_soil.n.", 
   "Soil fertility (carbon ppm)" = "mean_soil.c.", 
   "Elevation" = "mean_elev", 
   "Slope" = "mean_slp"
@@ -234,50 +235,26 @@ shinyServer(function(input, output, session) {
     c(input$core.data, input$crop.data, input$other.data)
   })
   
-  ## Load selected data:
-  loadedDat <- reactive ({
-    # specify resolution sub-directory based on user input
-    pth <- paste(dd, input$res, sep = "/")
-    
-    # create vector of unique data set names to load
-    toLoad <- getNames(inputs = allData(), setting = "load.data")
-    
-    # load selected border
-    bdrLayer <- input$geo
-    bdr <- readOGR(dsn = bpath, layer = bdrLayer)
-    
-    # load data sets that are cropped to chosen border
-    loadedDat <- loadDat(pth, toLoad, bdr)
-    return(loadedDat)
-  }) 
-  
-  ## load data and collapse data panel after actionButton is hit
-  getDat <- reactive ({
-    #Check that submit.data button is not null:
-    if(is.null(input$submit.data)) {
-      return()
-    }
-    
-    # Else load the data:
-    input$submit.data
-    dt <- loadedDat()
-    return(dt)
-    
-  })
-  
-  observeEvent(input$submit.data, {
-    updateCollapse(session, id = "collapse.steps",
-      close = "Step 1: choose what you want to visualize",
-      open = "Step 2: filter your map")
-  })
-  
   ## auto-generate *most* filters based on the datasets selected
   getAutoFilts <- reactive({
     # store resolution for future reference
     res <- input$res
     
-    # First get a list of data to auto-generate sliders for
-    fNames <- getNames(inputs = allData(), setting = "make.filters")
+    # First remove rainfall and C consumption datasets since these have
+    # their filters generated elsewhere:
+    allDt <- allData()
+    rm.1 <- c("mean_rm","mean_soil.c.")
+    
+    for(i in 1:length(rm.1)) {
+      g.s <- rm.1[i]
+      if(g.s %in% allDt) {
+        x <- match(g.s, allDt)
+        allDt <- allDt[-x]
+      }
+    }
+    
+    # Then get a list of data to auto-generate sliders for
+    fNames <- getNames(inputs = allDt, setting = "make.filters")
     
     # only continue if fNames is not empty
     if(length(fNames) > 0) {
@@ -290,7 +267,6 @@ shinyServer(function(input, output, session) {
             f.range$var == paste0(fNames[i], ".tif"))], digits = 0)
         maxRange <- round(f.range$max.threshold[which(f.range$res == res & 
             f.range$var == paste0(fNames[i], ".tif"))], digits = 0)
-        
         # Create filter and add to list (currently steps are not specified)
         fList[[i]] <- list(sliderInput(fNames[i], label = fNames[i],
           value = c(minRange, maxRange), min = minRange, max = maxRange))
@@ -307,6 +283,7 @@ shinyServer(function(input, output, session) {
   ## generate rainfall filters
   # first, need to create widget for mth input, which will provide
   #       mth section needed to build other rain inputs
+  ## TO DO: generate population type filters if datasets selected
   getRainFilts1 <- reactive({ 
     # only do this if rainfall data is selected
     if("mean_rm" %in% input$core.data) {
@@ -360,57 +337,13 @@ shinyServer(function(input, output, session) {
   output$filters_rain1 <- renderUI({ getRainFilts1() })
   output$filters_rain2 <- renderUI({ getRainFilts2() })
   
-  ## TO DO: generate population type filters if datasets selected
-  
-  ##Generate fertilizer consumption filters if datasets selected    
-  getFertFilts <- reactive({
-    
-    ## Save the resolution first:
-    res <- input$res
-    
-    ## Now produce and return the filters:
-    if("sum_n.con" %in% input$crop.data) {
-      # Get the Nitrogen filter:
-      # Get the range values:
-      ranges1 <- getRange("sum_n.con", res)
-      print("str"); print(str(ranges1))
-      # Then generate the filter:
-      x <- sliderInput(inputId ="sum_n.con", label = "Nitrogen Consumption", min = ranges1[1],
-        max = ranges1[2], value = c(0, ranges1[3]), step = NULL)
-      
-      # Get the Phosphorous filter:
-      ranges2 <- getRange("sum_p.con", res)
-      
-      y <- sliderInput(inputId = "sum_p.con", label = "Phosphorous Consumption", 
-        min = ranges2[1], max = ranges2[2], value = c(0, ranges2[3], step = NULL))
-      
-      ## Get the Potassium filter:
-      ranges3 <- getRange("sum_k.con", res)
-      
-      z <- sliderInput(inputId = "sum_k.con", label = "Potassium consumption",
-        min = ranges3[1], max = ranges3[2], value = c(0, ranges3[3]), step = NULL)
-      
-      # Return the filters:
-      filtL <- list(x,y,z)
-      return(filtL)
-      
-    }
-    else(
-      return (NULL)
-    )
-    
-  })
-  
-  ## render fertilizer filters
-  output$filters_fert <- renderUI({ getFertFilts() })
-  
   ## Generate C soil fertility filters if datasets selected    
   getSoilCFilts <- reactive({
     ## Save resolution:
     res <- input$res
     
     ## Now get the filters
-    if("mean_soil.c.15" %in% input$other.data) {
+    if("mean_soil.c." %in% input$other.data) {
       # Get the 5cm Carbon soil fertility filter 
       rg1 <- getRange("mean_soil.c.5", res)
       x <- sliderInput(inputId = "soil_c_5", label = "Soil Carbon fertility - 5cm",
@@ -434,20 +367,129 @@ shinyServer(function(input, output, session) {
   ## render soil fertility (carbon) filters
   output$filters_soil_c <- renderUI({ getSoilCFilts() })
   
-  ## TO DO: generate N soil fertility filters if datasets selected 
+  ## TO DO: generate N soil fertility filters if datasets selected  
+  
+  ## Get rainfall data names (called by loadedDat):
+  getRainNames <- reactive ({
+    # Initialize an empty vector
+    rnDat <- vector()
+    # Make sure rain data month selection is not null:
+    if(!is.null(input$rain_mth)) {
+      mm <- paste0("mean_rm_",input$rain_mth)
+      vol <- paste0("mean_rvol_", input$rain_mth)
+      rnDat[length(rnDat) + 1] <- mm
+      rnDat[length(rnDat) + 1] <- vol
+      print("Check rain data load"); print(rnDat)
+      return(rnDat)  
+    }
+    # If null, return the auto-selected month (Jan)
+    else {
+      x <- c("mean_rm_jan", "mean_rvol_jan")
+      return (x)
+    }
+  })
+  
+  ## Load selected data:+
+  loadedDat <- reactive ({
+    # specify resolution sub-directory based on user input
+    pth <- paste(dd, input$res, sep = "/")
+    
+    # Initialize vectors for rainfall & Carbon consumption data
+    # Idea is to only load rainfall data for selected month, and both of
+    # the Carbon consumption datasets (5cm and 15cm)
+    raind <- vector(); carbd <- vector()
+    alld <- allData()
+    
+    # Check if rainfall data is selected and if so remove from this list and load
+    # reactively depending on selected month:
+    r.m <- "mean_rm" #Rainfall ID
+    if(r.m %in% alld) {
+      x <- match(r.m, alld) # Get location of rainfall ID
+      alld <- alld[-x] # Then remove it
+      raind <- getRainNames() # And then load the rainfall data reactively
+    }
+    
+    # Also check for Carbon consumption data and load both 5cm and 15 cm:
+    f.t <- "mean_soil.c." # Carbon consumption I
+    
+    if (f.t %in% alld) {
+      x <- match(f.t, alld)  # Get location of rainfall ID in selected datasets
+      alld <- alld[-x] # Then remove it
+      carbd <- c("mean_soil.c.15", "mean_soil.c.5") # And then add both 5cm and 15cm IDs
+    }
+    
+    # If rain data was selected, add to list:
+    if(!is.null(raind))
+      alld <- c(alld, raind, carbd)
+    # create vector of unique data set names to load
+    toLoad <- getNames(inputs = alld, setting = "load.data")
+    #toLoad2 <- getNames(inputs = rm.1, setting = "load.data")
+    #toLoad3 <- getNames(inputs = rvol.1, setting = "load.data")
+    #toLoad4 <- list(toLoad, toLoad2, toLoad3)
+    
+    # load selected border
+    bdrLayer <- input$geo
+    bdr <- readOGR(dsn = bpath, layer = bdrLayer)
+    
+    # load data sets that are cropped to chosen border
+    loadedDat <- loadDat(pth, toLoad, bdr)
+    return(loadedDat)
+  }) 
+  
+  ## load data and collapse data panel after actionButton is hit
+  getDat <- eventReactive(input$submit.data, {
+    dt <- loadedDat()
+    return(dt)
+  })
+  
+  observeEvent(input$submit.data, {
+    updateCollapse(session, id = "collapse.steps",
+      close = "Step 1: choose what you want to visualize",
+      open = "Step 2: filter your map")
+  })
   
   ## Get input for each filter and use input to combine rasters and return a
   # single 1/NA raster for painting:
   getMerged <- reactive ({
-    # Get list of ids of server-generated filters
-    fId <- getNames(inputs = allData(), setting = "call.filters")
     
+    # Get selected datasets
+    allDat <- allData()
+    # Remove rainfall and Carbon consumption filter IDs if selected, since these have
+    # their filters generated elsewhere:
+    
+    rm.1 <- c("mean_rm", "mean_soil.c.") #What to look for
+    otherFils <- vector() # Initialize an empty vector to add the extra filter IDs
+    
+    if(rm.1[1] %in% allDat) { # If rainfall data was selected
+      x <- match(rm.1[1], allDat) 
+      allDat <- allDat[-x] # Index and remove from allDat
+      otherFils <- c("rain_mm", "rain_vol") # And add rainfall filter Ids to empty vector
+    }
+    
+    if(rm.1[2] %in% allDat) { # Do a similar things for Carbon consumption
+      x <- match(rm.1[2], allDat)
+      allDat <- allDat[-x]
+      carb <- c("soil_c_5", "soil_c_15")
+      otherFils <- c(otherFils, carb)
+    }
+    
+    # Test: 
+    print("Test of additional filters: "); print(otherFils)
+    
+    # Get list of ids of server-generated filters
+    fId <- getNames(inputs = allDat, setting = "call.filters")
     print("Here are the ids of the server-generated filters"); print(fId)
     
+    # Now add IDs for rainfall filters and Carbon consumption filters if selected
+    if(!is.null(otherFils)) {
+      fId <- c(fId, otherFils)  
+    }
     # do this only if data has been selected and loaded
     # TO DO: figure out why there's initially a subscript out of bounds error; doesn't seem to be breaking code so ignoring for now
-    if(!is.null(fId)) {
-      # Get the inputs of the server-generated filters
+    
+    print(is.null(fId));print(length(fId))
+    if(length(fId) != 0) {
+      # Get the inputs of all filters
       fList <- vector("list", length(fId))
       for(i in 1:length(fId)) {
         id <- fId[i]
@@ -457,16 +499,25 @@ shinyServer(function(input, output, session) {
     }
     
     # Get selected datasets
+    #dt <- loadedDat()
     dt <- getDat()
+    print("is the data still loaded?"); print(length(dt))
     
     # Create stack
     mgd <- getStack(dt, fList)
     return(mgd)
   })
   
+  ## Event observer for changes to filters ranges and refreshing map:
+   # BK - note: when filters change it's only the code under getMerged that runs
+gtMgd <- eventReactive(input$refresh.map, {
+     getMerged()
+   })
+  
   ## Paint merged raster to show boxes
-  output$map <- renderLeaflet({
-    spMerged.1 <- getMerged()
+    # WIP (BK): trying to isolate wherever getMerged is called
+  observeEvent(input$refresh.map, {output$map <- renderLeaflet({
+    spMerged.1 <- gtMgd()
     spMerged <- spMerged.1[[1]]
     
     # Only passing in one color instead of a palette
@@ -475,41 +526,37 @@ shinyServer(function(input, output, session) {
     leaflet() %>% addTiles() %>%
       addRasterImage(spMerged, opacity = 0.5, colors = pal1, project = T)
   })
-
+  }) # End of observeEvent here
   
-  ## Get downloadable data for the selected datasets
-  downDat <- reactive ({
-    # First get the loaded datasets:
-    dt <- getDat()
-   
-    ## TO-DO: Add function for loading a border and using it to extract the data
-    ## TO-DO: add progress bar
-    
-    # Then stack the rasters:
-    dt <- stack(dt)
-    
-    # Now extract data based on the selected geo:
-    ext <- extract(dt, coreOAF)
-    #write.csv(ext, "Downlaoded_data.csv", header = T)
-    print("________________________");print(nrow(ext[[1]]))
-    
-      
-
-    
-    
-    # Return the data:
-    return(ext)
-    
-  })
+  ## WIP: Get downloadable data for the selected datasets
+  #   downDat <- reactive ({
+  #     # First get the loaded datasets:
+  #     dt <- getDat()
+  #    
+  #     ## TO-DO: Add function for loading a border and using it to extract the data
+  #     ## TO-DO: add progress bar
+  #     
+  #     # Then stack the rasters:
+  #     dt <- stack(dt)
+  #     
+  #     # Now extract data based on the selected geo:
+  #     ext <- extract(dt, coreOAF)
+  #     #write.csv(ext, "Downlaoded_data.csv", header = T)
+  #     print("________________________");print(nrow(ext[[1]]))
+  #     
+  #     # Return the data:
+  #     return(ext)
+  #     
+  #   })
+  #   
+  #   # Event handler for donloading the data:
+  #   output$download.data <- downloadHandler(
+  #     filename = function () {
+  #       paste0("OAF_Geoboxes_data_", Sys.Date(), ".csv")
+  #     },
+  #     content = function (file = downDat()){
+  #       write.csv(file)
+  #     }
+  #   )
   
-  # Event handler for donloading the data:
-  output$download.data <- downloadHandler(
-    filename = function () {
-      paste0("OAF_Geoboxes_data_", Sys.Date(), ".csv")
-    },
-    content = function (file = downDat()){
-      write.csv(file)
-    }
-  )
-
 }) # Server input/output ends here
