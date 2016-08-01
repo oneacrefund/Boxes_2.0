@@ -1,7 +1,7 @@
 #### BASIC INFO ####
 # boxes global script
 # stuff in here is loaded into both server.r and ui.r
-# last edited: 14 jul 2016 (jy)
+# last edited: 23 jul 2016 (jy)
 
 #### syntax libraries ####
 # library(tidyr)
@@ -23,6 +23,15 @@ library(shinythemes)
 mths <- c("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", 
     "nov", "dec")
 
-#countries <- read.csv("data/Countries_ISO.csv", header = T)
-#countries.codes <- countries[,2]
+# Countries & regions
+countries <- read.csv("data/Countries_ISO.csv", header = T, stringsAsFactors = F)
+ctISO <- countries[,1]
+ctName <- countries[,2]
+
+regions <- c("East Africa", "South Africa", "West Africa", "All OAF countries",
+ "Core OAF countries", "All of SSA", "Central Africa")
+
+#### define collapsable panel titles ####
+panel1 <- "Step 1: choose what you want to visualize"
+panel2 <- "Step 2: set your filters and map it!"
 
