@@ -1,6 +1,6 @@
 #### BASIC INFO ####
 # boxes server script
-# last edited: 29 jul 2016 (bk)
+# last edited: 03 oct 2016 (bk)
 
 #### formatting to do list for version 2 #### 
 # hover text
@@ -33,7 +33,7 @@ shinyUI(fluidPage(theme = "bootstrap.css",
  #theme = shinytheme("flatly")
  # Title:
  titlePanel(div(h2(img(src = "green_leaf1.png"),tags$b("Boxes:"),
-   "One Acre Fund's geospatial repository", align = "center")),
+  "One Acre Fund's geospatial repository", align = "center")),
   windowTitle = "Boxes"),
  
  fluidRow(
@@ -51,12 +51,12 @@ shinyUI(fluidPage(theme = "bootstrap.css",
        fluidRow(
         # input data by variable
         column(width = 6, 
-         h5(strong("All data"), align = "center"),
+         h5(strong("All data"), align = "center"), tags$hr(),
          uiOutput("select_all_data")
         ),
         # input data by bundle
         column(width = 6, 
-         h5(strong("Data bundles"), align = "center"),
+         h5(strong("Data bundles"), align = "center"), tags$hr(),
          checkboxGroupInput(
           "topical.data", label = em("By topic*"),
           choices = list(
@@ -85,14 +85,14 @@ shinyUI(fluidPage(theme = "bootstrap.css",
           label = h5(strong("Box size")), 
           choices = paste0(c(5, 10, 20, 30, 40, 
            seq(50, 80, 5)), "km"), 
-          selected = "50km")
+          selected = "10km")
         ),
         # input region for cropping
         column(width = 4,
          uiOutput("geoui")
         ),
         
-        # input summary level of detail
+        # input sum,mary level of detail
         column(width = 4,
          selectInput("detail", 
           label = h5(strong("Summary level of detail*")), 
@@ -118,10 +118,12 @@ shinyUI(fluidPage(theme = "bootstrap.css",
          em(strong("* means this feature currently not fully functional:",  
           style = "color:firebrick")), 
          br(),
-         em("thus, please do not try to run the app with any of these features live",
+         em("thus, please do not try to run the app with any of these features yet",
           style = "color:firebrick"),
          br(),
          bsAlert("dataAlert"),
+         br(),
+         bsAlert("highResAlert"), 
          br(),
          bsAlert("loadingAlert")
          
@@ -132,24 +134,50 @@ shinyUI(fluidPage(theme = "bootstrap.css",
     ),
     # 2. panel for filtering based on selected data
     bsCollapsePanel(panel2,
-     sidebarLayout(position = "left", fluid = T,
+     sidebarLayout(position = "left", fluid = T, 
+      
       sidebarPanel(
        # put action button up-front in case of many filters
-       actionButton("refresh.map", 
-        label = "Set your filters below? Generate map!"),
-       br(), br(),
-       # show server-generated filters
-       uiOutput("filters_auto"),
-       uiOutput("filters_rain1"),
-       uiOutput("filters_rain2"),
-       uiOutput("filters_fert_comp"),
-       # uiOutput("filters_pop_type"),
-       uiOutput("filters_soil_c")
-       # uiOutput("filters_soil_n")
-      ),
+       style = "background-color:#F8F8FF",
+       wellPanel(
+        style = "background-color:#D3D3D3",
+        h4(strong("SHOW ME BOXES"), align = "center",
+         style = "color:#006400"),
+        tags$hr(style = "color:firebrick"),
+        actionButton("refresh.map", 
+         label = "Set your filters below? Generate map!"),
+        br(),br(), actionButton("show.admin",
+         label = "Show districts instead of Boxes"),
+        br(), br(style = "border-bottom-style: groove;
+         border-bottom-color:black"),
+        # show server-generated filters
+        uiOutput("filters_auto"),
+        uiOutput("filters_rain1"),
+        uiOutput("filters_rain2"),
+        uiOutput("filters_fert_comp"),
+        # uiOutput("filters_pop_type"),
+        uiOutput("filters_soil_c")
+        # uiOutput("filters_soil_n")
+       ),#end of wellPanel 1
+       
+       # Option to 'chrolopleth' with one dataset in place of boxes:
+       wellPanel(
+        style = "background-color:#D3D3D3",
+        h4(strong("SHOW ME A HEAT MAP"), align = "center",
+         style = "color:#006400"),
+        tags$hr(), 
+        em("If you would like to see a heat map shaded by a specific variable 
+         instead of single-color boxes, please choose your key variable of 
+        interest below and click 'Show palette' "), br(),
+        uiOutput("chloro_opts"), br(),
+        actionButton("chrolo.show", label = "Show palette")
+       )#WellPanel 2 ends here
+      ),#sidebarPanel ends here
+       
+      # main panel for map and rainfall data loading alert
       mainPanel(
        bsAlert("loadingRainAlert"),
-       leafletOutput("map")
+       leafletOutput("map", height = 600)
       )
      )
     )
