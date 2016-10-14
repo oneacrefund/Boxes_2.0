@@ -170,7 +170,9 @@ shinyUI(fluidPage(theme = "bootstrap.css",
          instead of single-color boxes, please choose your key variable of 
         interest below and click 'Show palette' "), br(),
         uiOutput("chloro_opts"), br(),
-        actionButton("chrolo.show", label = "Show palette")
+        actionButton("chrolo.show", label = "Show palette"), br(), br(),
+        downloadButton("data.down", label = "Download Holder"), br(), br(),
+        downloadButton("map.down", label = "Map Download")
        )#WellPanel 2 ends here
       ),#sidebarPanel ends here
        

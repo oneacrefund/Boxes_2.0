@@ -1,7 +1,7 @@
 #### BASIC INFO ####
 # boxes global script
 # stuff in here is loaded into both server.r and ui.r
-# last edited: 23 jul 2016 (jy)
+# last edited: 29 jul 2016 (bk)
 
 #### syntax libraries ####
 # library(tidyr)
@@ -12,11 +12,15 @@ library(rgdal)
 library(sp)
 library(raster)
 library(leaflet)
+library(RColorBrewer)
+library(webshot)
+webshot::install_phantomjs()
 
 #### shiny libraries ####
 library(shiny)
 library(shinyBS)
 library(shinythemes)
+library(htmlwidgets)
 
 #### handy vectors ####
 # Months

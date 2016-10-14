@@ -1,6 +1,6 @@
 #### BASIC INFO ####
 # boxes server script
-# last edited: 04 oct 2016 (bk)
+# last edited: 06 oct 2016 (bk)
 
 #### SET-UP #### 
 ## clear environment and console
@@ -131,7 +131,7 @@ getRegion2 <- function (reg) {
  pos <- match(reg, ctName)
  reg1 <- ctISO[pos]
  # Then create a string matching the border name
- reg1 <- paste0(reg1, "_adm1.rds")
+ reg1 <- paste0(reg1, "_adm3.rds")
  # And finally load and return the border
  bdr <- readRDS(file = paste(bpath2, reg1, sep = "/"))
  return(bdr)
@@ -156,6 +156,38 @@ getStack <- function(rastlist, rastfil) {
  bool.1 <- stack(bools)
  bool.1 <- calc(bool.1, fun = prod)
  return(bool.1)
+}
+
+## Function that creates character vectors for pop-ups for admin-level mapping:
+#Takes in extracted data (df with IDs, names, and names of each dataset as in fRange)
+getPops <- function (dt) {
+ n <- ncol(dt) - 1 #This eliminates the last col which was added for leaflet mapping
+ #Select region names and datasets separately
+ rgns <- dt[,2] #TO-DO:Add in other regions e.g. country, county, ward, etc
+ dt <- dt[,3:n] 
+ ##Round data to nearest whole numbers:
+ dt <- format(dt, digits = 0, big.mark = ",")
+ ##Get names for datasets:
+ nms <- names(dt)
+ for(i in 1:length(nms)) {
+  x <- nms[i]
+  nms[i] <- f.range$filt.name[which(f.range$var == paste0(x, ".tif"))] %>% 
+   as.character()
+ }
+ 
+ ##Combine region and dataset names and apply to dt:
+ nms2 <- c("State"); nms <- c(nms2, nms)
+ dt <- cbind(rgns, dt); names(dt) <- nms
+ 
+ #Add HTML and make pop-up pretty:
+ v <- apply(dt, 1, function(y) {
+  sprintf("<table width='100%%'>%s</table>",
+   paste0("<tr><td style='text-align:left'><b>", names(y),
+    ":</b></td><td style='text-align:right'>", y, 
+    collapse = "</td></tr>"))
+ })
+ names(v) <- NULL
+ return(v)
 }
 
 #### DEFINE CHOICES FOR DATA SELECTION INPUTS ####
@@ -677,89 +709,130 @@ shinyServer(function(input, output, session) {
   })
  })
  
- ##WIP: Paint merged raster to show admin boundaries instead (districts)
+ ##WIP:Extracting and filtering data for admin boundaries mapping and download:
  observeEvent(input$show.admin, {
-  output$map <- renderLeaflet({
-   # Get loaded data and extract values summarized as means for each polygon feature
-   # sp2 is a df with an ID col, and a col for each dataset
-   # Rows in sp2 correspond to the polygon features (admin regions)
-   bdr <- loadedBdr()
-   dt <- stack(unlist(getDat$loadedDat))
-   sp2 <- extract(dt, bdr, method = "simple", fun = mean, df = T, na.rm = T)
-   
-   ## Filter extracted values to filter ranges:
-   # First get the filters (code from getMerged):
-   # Get selected datasets from checkbox inputs
-   allDat <- allData()
-   # Get list of ids of server-generated filters
-   fId <- getNames(inputs = allDat, setting = "call.filters")
-   # remove rain_mth if rainfall is selected
-   if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
-   # do this only if data has been selected and loaded
-   if(length(fId) != 0) {
-    # Get the inputs of all filters
-    fList <- vector("list", length(fId))
-    for(i in 1:length(fId)) {
-     id <- fId[i]
-     fList[[i]] <- input[[id]]
-    }
+  # Get loaded data and extract values summarized as means for each polygon feature
+  # sp2 is a df with an ID col, and a col for each dataset
+  # Rows in sp2 correspond to the polygon features (admin regions)
+  bdr <- loadedBdr()
+  dt <- stack(unlist(getDat$loadedDat))
+  sp2 <- extract(dt, bdr, method = "simple", fun = mean, df = T, na.rm = T)
+  
+  #Left-join sp2 with bdr data BEFORE filtering, then save as a reactiveValue
+  #This is the global df we will use for data download
+  bdr@data <- left_join(bdr@data[,c("OBJECTID", "NAME_1")], sp2,
+   by = c("OBJECTID" = "ID"))
+  getDat$downDat <- bdr@data
+  
+  ## Filter extracted values to filter ranges:
+  # First get the filters (code from getMerged):
+  # Get selected datasets from checkbox inputs
+  allDat <- allData()
+  # Get list of ids of server-generated filters
+  fId <- getNames(inputs = allDat, setting = "call.filters")
+  # remove rain_mth if rainfall is selected
+  if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
+  # do this only if data has been selected and loaded
+  if(length(fId) != 0) {
+   # Get the inputs of all filters
+   fList <- vector("list", length(fId))
+   for(i in 1:length(fId)) {
+    id <- fId[i]
+    fList[[i]] <- input[[id]]
    }
-   
-   # Now we filter; retain value if within filter ranges; else assign an NA
-   # First we remove the ID column and store it for later use:
-   sp2Id <- sp2$ID; sp2 <- sp2[,-1]
-   #Then filter
-   for(i in 1:ncol(sp2)) {
-    colN <- sp2[,i] %>% as.vector()
-    for(j in 1:length(colN)) {
-     #There are NaNs in our data, and they break the loop, so we make them NAs first
-     if(!is.finite(colN[j])){
-      colN[j] <- NA
-     }
-     #Then we filter then non NaN values by retaining vals within filter criteria
-     else if(colN[j] >= fList[[i]][1] && colN[j] <= fList[[i]][2]){
-      colN[j] <- colN[j]
-     }
-     #And set values that falling outside filter criteria to NAs
-     else {
-      colN[j] <- NA
-     }
+  }
+  
+  # Now we filter; retain value if within filter ranges; else assign an NA
+  # First we remove the ID column and store it for later use:
+  sp2Id <- sp2$ID; sp2 <- sp2[,-1]
+  #Then filter
+  for(i in 1:ncol(sp2)) {
+   colN <- sp2[,i] %>% as.vector()
+   for(j in 1:length(colN)) {
+    #There are NaNs in our data, and they break the loop, so we make them NAs first
+    if(!is.finite(colN[j])){
+     colN[j] <- NA
     }
-    # Then we replace the old column in sp2 with the new column
-    sp2[,i] <- colN
-   }
-   
-   # Comparing columns of sp2:
-   # If a row has at least 1 NA then new data object gets an NA
-   # Else it gets a 1
-   newDt <- NULL #new data column
-   for(i in 1:nrow(sp2)) {
-    rowN <- sp2[i,] %>% as.numeric() #subset each row
-    if(NA %in% rowN) { #If the row has an NA
-     newDt[length(newDt) + 1] <- NA #make new datapoint an NA
+    #Then we filter then non NaN values by retaining vals within filter criteria
+    else if(colN[j] >= fList[[i]][1] && colN[j] <= fList[[i]][2]){
+     colN[j] <- colN[j]
     }
+    #And set values that falling outside filter criteria to NAs
     else {
-     newDt[length(newDt) + 1] <- 1 #else make new datapoint a 1
+     colN[j] <- NA
     }
    }
+   # Then we replace the old column in sp2 with the new column
+   sp2[,i] <- colN
+  }
+  
+  # Comparing columns of sp2:
+  # If a row has at least 1 NA then new data object gets an NA
+  # Else it gets a 1
+  newDt <- NULL #new data column
+  for(i in 1:nrow(sp2)) {
+   rowN <- sp2[i,] %>% as.numeric() #subset each row
+   if(NA %in% rowN) { #If the row has an NA
+    newDt[length(newDt) + 1] <- NA #make new datapoint an NA
+   }
+   else {
+    newDt[length(newDt) + 1] <- 1 #else make new datapoint a 1
+   }
+  }
+  
+  #Add the new data column, newDt, and the ID column back to sp2
+  sp2$DATA <- newDt
+  sp2$ID <- sp2Id
+  ## Combine sp2 data with bdr data (shapefiles)
+  bdr@data <- left_join(bdr@data[,c("OBJECTID", "NAME_1")], sp2,
+   by = c("OBJECTID" = "ID"))
+  
+  
+  #Store bdr@data in getDat:
+  getDat$sp2 <- bdr@data
+  
+ })
+ 
+ ##WIP: Paint merged raster to show admin boundaries instead (districts)
+ #TO-DO: use a switch case for various admin levels e.g. c(ward, district,
+ #county, state, country... See sketch)
+ getDistr <- reactive ({
+  output$map <- renderLeaflet({
    
-   #Add the new data column, newDt, and the ID column back to sp2
-   sp2$DATA <- newDt
-   sp2$ID <- sp2Id
-   ## Combine sp2 data with bdr data (shapefiles)
-   bdr@data <- left_join(bdr@data[,c("OBJECTID", "NAME_1")], sp2,
-    by = c("OBJECTID" = "ID"))
+   #Get loaded extracted and filtered data
+   #also get selected shapefile and add our data to it
+   sp2 <- getDat$sp2
+   bdr <- loadedBdr()
+   bdr@data <- sp2
    
    ## Create color palette
    pal2 <- colorNumeric("#006400", domain = bdr@data$DATA,
     na.color = "#00000000")
-   ## Now create map
-   makeMap <- leaflet(bdr) %>% addTiles() %>% 
-    addPolygons(stroke = F,fill = T, fillColor = pal2(bdr@data$DATA), fillOpacity = 0.5, smoothFactor = F)
-   ## And return map
-   return(makeMap)
+   ## Now create map and return map
+   #TO-DO: make the progress bar work well; ends before map shows up
+   withProgress(message = "Updating map", detail = "Getting data", 
+    value = 0.5, {
+     makeMap <- leaflet(bdr) %>% addTiles() %>% 
+      addPolygons(stroke = T,fill = T, fillColor = pal2(bdr@data$DATA), fillOpacity = 0.5,
+       smoothFactor = F, color = "white", weight = 0.5, dashArray = 3, 
+       opacity = 0.5, popup = getPops(sp2))
+     
+     #Save map for download:
+     #getDat$downMap <- saveWidget(widget = makeMap, file = "map.png", selfcontained = F)
+     getDat$downMap <- makeMap
+     print("ok"); print(str(getDat$downMap)) # Quite long but looks like a shapefile
+     
+     incProgress(0.5, detail = "BOOM") 
+     return(makeMap) #Then display map
+    })#End of withProgress
    
   })
+ })
+ 
+ ## Add an eventReactive and observeEvent to stop distrcits map from auto-refreshing:
+ getDistrR <- eventReactive(input$show.admin, {getDistr()})
+ observeEvent(input$show.admin, {
+  getDistrR()
  })
  
  # WIP: chrolopleth based on only one of the selected datasets:
@@ -825,43 +898,56 @@ shinyServer(function(input, output, session) {
     addRasterImage(mp, opacity = 0.7, colors = pal3, project = T) %>% 
     addLegend(position = "bottomright", pal = pal3, values = rg,
      na.label = "Missing", title = "Map Key:")
+   
+   
+   
    return(makeMap)
    
   })
  })
  
+ ##Get downloadable data for the selected datasets
+ downDat <- reactive ({
+  #Get the loaded data for output
+  dt <- getDat$downDat 
+  return(dt)
+ })
  
- ## WIP: Get downloadable data for the selected datasets
- #   downDat <- reactive ({
- #     # First get the loaded datasets:
- #     dt <- getDat()
- #    
- #     ## TO-DO: Add function for loading a border and using it to extract the data
- #     ## TO-DO: add progress bar
- #     
- #     # Then stack the rasters:
- #     dt <- stack(dt)
- #     
- #     # Now extract data based on the selected geo:
- #     ext <- extract(dt, coreOAF)
- #     #write.csv(ext, "Downloaded_data.csv", header = T)
- #     print("________________________");print(nrow(ext[[1]]))
- #     
- #     # Return the data:
- #     return(ext)
- #     
- #   })
- #   
- #   # Event handler for donloading the data:
- #   output$download.data <- downloadHandler(
- #     filename = function () {
- #       paste0("OAF_Geoboxes_data_", Sys.Date(), ".csv")
- #     },
- #     content = function (file = downDat()){
- #       write.csv(file)
- #     }
- #   )
+ ## Event handler for downloading the data:
+ output$data.down <- downloadHandler(
+  filename = function () {
+   paste0("OAF_Geoboxes_data_", Sys.Date(), ".csv")
+  },
+  content = function (file){
+   write.csv(downDat(), file)
+  }
+ )
  
+ ##Map download option:
+ #Note: map downloads at the user's zoom level
+ #Note2: just like data, ends up in the user's DOWLOADS folder
+ #Reactive that gets the map from the reactiveValues variable
+ downMap <- reactive ({
+  mp <- getDat$downMap
+  return(mp)
+ })
+ #Download handler that downloads the map
+ #Uses the webhooks package and the phantomJS webkit
+ #BK is not 100% sure how this works---magic!
+ #Partly borrowed from:
+ #  http://stackoverflow.com/questions/35384258/save-leaflet-map-in-shiny
+ output$map.down <- downloadHandler(
+  filename = function () {
+   paste0("OAF_map_", Sys.Date(), ".png")
+  },
+  content = function (file){
+   owd <- setwd(tempdir())
+   on.exit(setwd(owd))
+   saveWidget(downMap(), "temp.html", selfcontained = F)
+   webshot("temp.html", file = file, cliprect = "viewport")
+  }
+ )
+
 }) # Server input/output ends here
 
 # rsconnect::deployApp("~/drive/Boxes_2.0/Code files", appName = "Boxes", account = "oneacrefund")
