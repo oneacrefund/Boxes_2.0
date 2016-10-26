@@ -14,13 +14,13 @@ library(raster)
 library(leaflet)
 library(RColorBrewer)
 library(webshot)
-webshot::install_phantomjs()
+#webshot::install_phantomjs()
+library(htmlwidgets)
 
 #### shiny libraries ####
 library(shiny)
 library(shinyBS)
 library(shinythemes)
-library(htmlwidgets)
 
 #### handy vectors ####
 # Months
