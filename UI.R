@@ -1,6 +1,6 @@
 #### BASIC INFO ####
 # boxes server script
-# last edited: 18 oct 2016 (bk)
+# last edited: 26 oct 2016 (bk)
 
 #### formatting to do list for version 2 #### 
 # hover text
