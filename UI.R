@@ -1,6 +1,6 @@
 #### BASIC INFO ####
 # boxes server script
-# last edited: 26 oct 2016 (bk)
+# last edited: 01 nov 2016 (bk)
 
 #### formatting to do list for version 2 #### 
 # hover text
@@ -32,8 +32,8 @@
 shinyUI(fluidPage(#theme = "bootstrap.css", 
  theme = shinytheme("spacelab"),
  #shinythemes::themeSelector(),
-
-  # Title:
+ 
+ # Title:
  titlePanel(div(h2(img(src = "green_leaf1.png"),tags$b("Boxes:"),
   "One Acre Fund's geospatial repository", align = "center")),
   windowTitle = "Boxes"),
@@ -132,7 +132,7 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
         headers to close or expand them!"), tags$hr(),
        bsCollapse( multiple = T, open = "panel1",
         bsCollapsePanel(
-         title = h4(strong("SET FILTERS FOR YOUR DATA:"), align = "center", 
+         title = h4(strong("SET FILTERS AND MAP TYPE:"), align = "center", 
           style = "color:#006400"),value = "panel1",
          wellPanel(
           em("HINT:filters will affect all other aspects of your mapping
@@ -157,61 +157,90 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
         bsCollapsePanel(
          title = h4(strong("DISPLAY BOXES:"), align = "center",
           style = "color:#006400"), value = "panel2",
-        #wellPanel 2: displaying boxes
-        wellPanel(
-         style = "background-color:#D3D3D3",
-         
-         fluidRow(
-         #actionButton("refresh.map", 
-          #label = "Generate boxes map!")
-          uiOutput("boxes_opts")
-         )
-        ) #End of wellpanel 2
-       ),#End of bsCollapsePanel
+         #wellPanel 2: displaying boxes
+         wellPanel(
+          style = "background-color:#D3D3D3",
+          
+          fluidRow(
+           #actionButton("refresh.map", 
+           #label = "Generate boxes map!")
+           uiOutput("boxes_opts")
+          )
+         ) #End of wellpanel 2
+        ),#End of bsCollapsePanel
         
         #wellPanel 3: displaying districts mapping
         bsCollapsePanel(
          title = h4(strong("DISPLAY DISTRICTS:"), align = "center",
           style = "color:#006400"), value = "panel3",
-        wellPanel(
-         style = "background-color:#D3D3D3",
-         fluidRow(
-          em("Select level of detail, then click the button below to show map"),br(),
-          selectInput("detail", 
-           label = h5(strong("Summary level of detail:")), 
-           choices = list("Regional","District"), 
-           selected = "Regional")
-         ),
-         fluidRow(
-          #actionButton("show.admin", label = "Generate filter map")
-          uiOutput("districts_opts")
-          
-         ), br(), tags$hr(),
-         fluidRow( #placeholder for summary of detail:
-          #to generate after region/district is selected
-          uiOutput("drillDown")
-         ),
-         # Data/map downlaod options
-         # Consider moving these onto the map itself (see Shiny modules)
-         tags$hr(),
-         fluidRow(
-          em("Use the button options below to download your map or data:"),br(),br(),
-          column(width = 6,
-           downloadButton("data.down", label = "Download Data")
+         wellPanel(
+          style = "background-color:#D3D3D3",
+          fluidRow(
+           em("Select level of detail, then click the button below to show map"),br(),
+           selectInput("detail", 
+            label = h5(strong("Summary level of detail:")), 
+            choices = list("Regional","District"), 
+            selected = "Regional")
           ),
-          column(width = 6,
-           downloadButton("map.down", label = "Download Map")
+          fluidRow(
+           #actionButton("show.admin", label = "Generate filter map")
+           uiOutput("districts_opts")
+           
+          ), br(), tags$hr(),
+          fluidRow( #placeholder for summary of detail:
+           #to generate after region/district is selected
+           uiOutput("drillDown")
+          ),
+          # Data/map downlaod options
+          # Consider moving these onto the map itself (see Shiny modules)
+          tags$hr(),
+          fluidRow(
+           em("Use the button options below to download your map or data:"),br(),br(),
+           column(width = 6,
+            downloadButton("data.down", label = "Download Data")
+           ),
+           column(width = 6,
+            downloadButton("map.down", label = "Download Map")
+           )
+          ),
+          
+          ##WIP: manual-entry filters; will move them up later once done
+          fluidRow(
+           uiOutput("title_panel")
           )
-         )
-         
-        )#end of wellPanel 3
-         ) #End of bsCollapsePanel
-      ) #End of bsCollapse
+         )#end of wellPanel 3
+        ) #End of bsCollapsePanel
+       ) #End of bsCollapse
       ),#sidebarPanel ends here
-      # main panel for map and rainfall data loading alert
+      # main panel for map, # of HHs, benchmarks and rainfall data loading alert
       mainPanel(
+       #Rainfall data loading alert
        bsAlert("loadingRainAlert"),
-       leafletOutput("map", height = 600)
+       #Map output
+       fluidRow(
+        leafletOutput("map", height = 600) 
+       ), tags$hr(),
+       #Market size (# of HHs) -- WIP
+#        fluidRow(
+#         column(width = 3,
+#          style = "background-color:#D3D3D3",
+#          h4(strong("Estimated Market Size (# of HHs):"), style = "color:#006400")
+#         ),
+#         column(width = 4,
+#          uiOutput("market_size")
+#         )
+#        ), tags$hr(),
+       #Benchmark data table
+       fluidRow(
+        style = "background-color:#D3D3D3",
+        h3(strong("Benchmark figures for selected datasets -- if available:"),
+         style = "color:#006400")
+       ),
+       fluidRow(
+        style = "background-color:#D3D3D3",
+        DT::dataTableOutput("benchmarks")
+       ),
+       tags$hr()
       )
      )
     )

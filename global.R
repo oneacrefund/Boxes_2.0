@@ -1,7 +1,7 @@
 #### BASIC INFO ####
 # boxes global script
 # stuff in here is loaded into both server.r and ui.r
-# last edited: 29 jul 2016 (bk)
+# last edited: 01 nov 2016 (bk)
 
 #### syntax libraries ####
 # library(tidyr)
@@ -21,6 +21,7 @@ library(htmlwidgets)
 library(shiny)
 library(shinyBS)
 library(shinythemes)
+library(DT)
 
 #### handy vectors ####
 # Months
