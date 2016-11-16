@@ -49,7 +49,8 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
     bsCollapsePanel(panel1,
      fluidRow(
       column(width = 6,
-       h4(strong("SELECT DATA"), align = "center"), tags$hr(),
+       h4(strong("A: SELECT DATA"), align = "center",
+        style = "color:firebrick"), tags$hr(),
        fluidRow(
         # input data by variable
         column(width = 6, 
@@ -77,9 +78,10 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
          )
         )
        )
-      ),
+      ), 
       column(width = 6,
-       h4(strong("SELECT GEOGRAPHY"), align = "center"), tags$hr(), 
+       h4(strong("B: SELECT GEOGRAPHY"), align = "center",
+        style = "color:firebrick"), tags$hr(), 
        fluidRow(
         # input resolution
         column(width = 6,
@@ -109,21 +111,41 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
        ), br(), br(),
        
        #Setting map type:
-       
        fluidRow(
-        h4(strong("SELECT GEOGRAPHY"), align = "center"), tags$hr(),
-        column(width = 6
-         
+        h4(strong("C: SET MAP TYPE:"), align = "center",
+         style = "color:firebrick"), tags$hr(),
+        column(width = 5,
+         style = "background-color:#f2f6f9",
+         #Section 1: selecting between boxes and districts map:         
+         em("1. First, set your map type by choosing between a boxes map,
+          and an admin-boundary-based map:"),
+         selectInput("boxes_admin", label = "",
+          choices = c("Boxes Map", "Admin-based Map"), selected = "Boxes Map",
+          multiple = F, width = "100%"),
+         # Section 1 b: UI output for choosing level of detail for admin mapping
+         uiOutput("detail")
         ),
-        column(width = 6
-         
+        column(width = 1),
+        column(width = 6,
+         fluidRow(
+          style = "background-color:#f2f6f9",
+          #Section 2: selecting between heat map and green binary map:
+          em("2. Now choose between displaying a filtered binary green map for
+           all your selected datasets, and a filtered heat map for only one
+           of your datasets:"),
+          selectInput("map_type", label = "",
+           choices = c("Binary Green Map", "Heat Map"), selected = "Binary Green Map",
+           multiple = F, width = "100%"),
+          #Section 2 a: UI output for choosing a variable for heat map:
+          uiOutput("heatMap_opts")
+          )
         )
-       ),
+       ), tags$hr(),
        
        fluidRow(
         column(width = 12,
          actionButton("submit.data",
-          label = "Done selecting data? Click Me!")
+          label = "Done? Click Me!")
         ),
         # TO DO: make this helpText pop up only after submit.data is clicked 
         
@@ -161,43 +183,14 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
         bsCollapsePanel(
          title = h4(strong("SET YOUR FILTERS AND MAP TYPE:"), align = "center", 
           style = "color:#006400"),value = "panel1",
-          
-         fluidRow(
-          style = "background-color:#f2f6f9",
-         #Section 1: selecting between boxes and districts map:         
-         em("1. First, set your map type by choosing between a boxes map,
-          and an admin-boundary-based map:"),
-         selectInput("boxes_admin", label = "",
-          choices = c("Boxes Map", "Admin-based Map"), selected = "Boxes Map",
-          multiple = F, width = "100%"),
-          # Section 1 b: UI output for choosing level of detail for admin mapping
-          uiOutput("detail")
-          ),#End of fluidRow1
-         tags$hr(),
-          
-          fluidRow(
-           style = "background-color:#f2f6f9",
-           #Section 2: selecting between heat map and green binary map:
-          em("2. Now choose between displaying a filtered binary green map for
-           all your selected datasets, and a filtered heat map for only one
-           of your datasets:"),
-          selectInput("map_type", label = "",
-           choices = c("Binary Green Map", "Heat Map"), selected = "Binary Green Map",
-           multiple = F, width = "100%"),
-          #Section 2 a: UI output for choosing a variable for heat map:
-          uiOutput("heatMap_opts")
-          ), #End of fluidRow 2
-          tags$hr(), 
-         
           fluidRow(
            style = "background-color:#f2f6f9",
            #Section 3: all data filters:
-          em("3. Awesome! As a last step, please set the filters for your
+          em("Awesome! As a last (for real) step, please set the filters for your
            selected datasets below, and then hit the button just below to
            generate your map to the right side!"),
           # show server-generated filters
           uiOutput("filters_auto"),
-          
           uiOutput("filters_rain2"),
           uiOutput("filters_fert_comp"),
           # uiOutput("filters_pop_type"),
@@ -228,7 +221,6 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
         ) # End of bsCollapsePanel 2
        ) #End of bsCollapse
       ),#sidebarPanel ends here
-      
       
       # main panel for map, # of HHs, benchmarks and rainfall data loading alert
       mainPanel(

@@ -41,9 +41,9 @@ getNames <- function(inputs, setting) {
   #Yield gap data will also be handled separately;
   #load by selected crops instead of all at once (do the same for crop mix)
   if("_yieldgap" %in% toLoad){
-    addYield <- NA
+   addYield <- NA
    toLoad <- toLoad[-which(toLoad == "_yieldgap")]
-   toLoad <- c(toLoad, addYield)
+   #toLoad <- c(toLoad, addYield)
   }
   if("Fertilizer consumption (kg/acre)" %in% toLoad) {
    if(setting == "make.filters") { addFert <- NA } 
@@ -65,8 +65,6 @@ getNames <- function(inputs, setting) {
    toLoad <- toLoad[-which(toLoad == "mean_soil.c.")]
    toLoad <- c(toLoad, addSoilC)
   }
-  # TO DO: add conditional adjustments for N soil fertility
-  
   # remove any NAs
   toLoad <- toLoad[!is.na(toLoad)]
   return(toLoad)
@@ -219,16 +217,14 @@ getPops <- function (dt, namesDt) {
  
  ##Round data to nearest whole numbers:
  dt <- format(dt, digits = 0, big.mark = ",")
- print(head(dt))
  ##Get names for selected datasets:
  #Names are same at all res, so using 5km res for all cases
  nms <- names(dt)
- nms1 <- vector(length = length(nms)); print(nms)
+ nms1 <- vector(length = length(nms))
  for(i in 1:length(nms)) {
   x <- nms[i]
   nms1[i] <- f.range$filt.name[which(f.range$var == paste0(x, ".tif") & 
-    f.range$res == "5km")] %>% as.character()
-  print(nms1[i])
+    f.range$res == "10km")] %>% as.character()
  }
  
  ##Combine region and dataset names and apply to dt:
@@ -458,8 +454,10 @@ shinyServer(function(input, output, session) {
    msg <- em("Before we set your map type, I noticed that you selected yield
    gaps as one of your datasets. Please choose the crops whose yield gaps
     you wish to see from the options below:")
-   opts <- checkboxGroupInput("yield_group", label = "", choices = cropsYield,
-    selected = "maize", width = "100%")
+#    opts <- checkboxGroupInput("yield_group", label = "", choices = cropsYield,
+#     selected = "maize", width = "100%")
+   opts <- selectizeInput("yield_group", label = "", choices = cropsYield,
+    selected = "maize", multiple = T, width = "100%")
   }
   rt <- list(msg, opts)
   return(rt)
@@ -475,7 +473,6 @@ shinyServer(function(input, output, session) {
    yieldDat <- input$yield_group
    #Create names matching names of raster files on files:
    yieldDat <- paste0(yieldDat, "_yieldgap")
-   print(yieldDat)
    #Get labels and filter ranges then create a filter for each selected crop:
    if(length(yieldDat > 0)) {
     fLst <- vector("list", length(yieldDat))
@@ -527,14 +524,14 @@ shinyServer(function(input, output, session) {
    labl <- mmRange[3]
    mmRange <- c(as.numeric(mmRange[1]), as.numeric(mmRange[2]))
    fList[[1]] <- sliderInput("rain_mm", label = labl, 
-    value = mmRange, min = mmRange[1], max = mmRange[2], step = 50)
+    value = mmRange, min = mmRange[1], max = mmRange[2], step = 0.01)
    # create filter for volatility of rain, based on mth selected
    nmVol <- paste0("mean_rvol_", input$rain_mth)
    volRange <- getRange(nmVol, res)
    labl2 <- volRange[3]
    volRange <- c(as.numeric(volRange[1]), as.numeric(volRange[2]))
    fList[[2]] <- sliderInput("rain_vol", label = labl2,
-    value = volRange, min = volRange[1], max = volRange[2], step = 0.1)
+    value = volRange, min = volRange[1], max = volRange[2], step = 0.01)
    return(fList)
   } else {
    NULL
@@ -746,7 +743,6 @@ shinyServer(function(input, output, session) {
      # load data sets that are cropped to chosen border
      loadedDat <- loadDat(pth, toLoad, bdr)
      incProgress(0.6, detail = "woot - all data loaded!")
-     print(loadedDat)
      return(loadedDat)
     })
   }
@@ -766,20 +762,43 @@ shinyServer(function(input, output, session) {
   }
  })
  
- ## Load
+ ## Load yieldgap data:
+ loadedYield <- reactive({
+  if(("_yieldgap" %in% allData()) & (!is.null(input$yield_group))) {
+   withProgress(message = "Loading yield gap data for selected crops", value = 0,
+    detail = "almost there!", {
+     #set directory and border
+     pth <- paste(dd, input$res, sep = "/")
+     bdr <- loadedBdr()
+     #Get file names:
+     toLoad <- input$yield_group
+     toLoad <- paste0(toLoad, "_yieldgap")
+     #Load data:
+     incProgress(0.5, detail = "Hang on!")
+     loadedDat <- loadDat(pth, toLoad, bdr)
+     incProgress(0.5, detail = "Yield gap data loaded")
+     return(loadedDat)
+    })# End of withProgress
+  }
+ })
+ observeEvent(input$submit.data, {
+  if(("_yieldgap" %in% allData()) & (!is.null(input$yield_group))) {
+   getDat$loadedYield <- loadedYield()
+  }
+ })
  
- ## Get input for each filter and use input to combine rasters and return a
- # single 1/NA raster for painting:
- getMerged <- reactive ({
-  
+ ## Load crop mix data:
+ 
+ 
+ 
+ ## Reactive and event observer for filter inputs:
+ getFiltInputs <- reactive({
   # Get selected datasets from checkbox inputs
   allDat <- allData()
-  
   # Get list of ids of server-generated filters
   fId <- getNames(inputs = allDat, setting = "call.filters")
   # remove rain_mth if rainfall is selected
   if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
-  print(fId)
   # do this only if data has been selected and loaded
   if(length(fId) != 0) {
    # Get the inputs of all filters
@@ -789,7 +808,25 @@ shinyServer(function(input, output, session) {
     fList[[i]] <- input[[id]]
    }
   }
+  #If yield gap data was selected, append filters to current filters
+  #this will be in the same order as the datasets:
+  if("_yieldgap" %in% allDat) {
+   fId2 <- input$yield_group
+   fId2 <- paste0(fId2, "_yieldgap")
+   fList2 <- vector("list", length(fId2))
+   for(i in 1:length(fId2)) {
+    id <- fId2[i]
+    fList2[[i]] <- input[[id]]
+   }
+   fList <- c(fList, fList2)
+  }
+  return(fList)
+ }) 
+ 
+ ## Reactive that gets loaded datasets (returns a list of datasets that are loaded):
+ getAllLoadedData <- reactive({
   # Get selected datasets
+  allDat <- allData()
   # if user only selected rainfall
   if(length(allDat) == 1 & ("mean_rm" %in% allDat)) {
    dt <- getDat$loadedRain
@@ -799,45 +836,12 @@ shinyServer(function(input, output, session) {
    # if user selected another dataset and rainfall
    if("mean_rm" %in% allDat) {
     dt <- c(dt, getDat$loadedRain)
-   }    
-  }
-  dt1 <- unlist(dt) %>% stack()
-  print(names(dt1))
-  # Create stack
-  mgd <- getStack(dt, fList)
-  return(mgd)
- })
- 
- ## WIP (BK): observeEvent for filter inputs
- #Listens to data submit button, and ignores inputs for filters whose data
- #was not loaded
- 
- 
- ## Event observer for changes to filters ranges and refreshing map:
- # when filters change, it's only the code under getMerged that runs
- gtMgd <- eventReactive(input$refresh.map, { getMerged() })
- 
- ## Paint merged raster to show boxes
- observeEvent(input$refresh.map, {
-  output$map <- renderLeaflet({
-   # grab the merged raster layer to plot
-   spMerged <- gtMgd()[[1]]
-   makeMap <- leaflet() %>% addTiles() 
-   
-   # assuming not everything has been filtered out, add raster layer
-   if(spMerged@data@min != Inf) {
-    
-    # Only passing in one color instead of a palette
-    pal1 <- colorNumeric("#006400", domain = values(spMerged),
-     na.color =  "#00000000")
-    
-    makeMap <- makeMap %>%
-     addRasterImage(spMerged, opacity = 0.5, colors = pal1, 
-      project = T)
-    getDat$downMap <- makeMap
    }
-   return(makeMap)
-  })
+   if("_yieldgap" %in% allDat) {
+    dt <- c(dt, getDat$loadedYield)
+   }
+  }
+  return(dt)
  })
  
  ## Load the selected geography - country/region:
@@ -1033,30 +1037,12 @@ shinyServer(function(input, output, session) {
  ## reactive that generates a border file for leaflet based on level of detail
  # Also renders drilldown option if available
  getAdminBdr <- reactive({
-  ## Filter extracted values to filter ranges:
-  # First get the filters (code from getMerged):
-  # Get selected datasets from checkbox inputs
-  allDat <- allData()
-  # Get list of ids of server-generated filters
-  fId <- getNames(inputs = allDat, setting = "call.filters")
-  print(fId); print("and"); print(allDat)
-  # remove rain_mth if rainfall is selected
-  if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
-  # do this only if data has been selected and loaded
-  if(length(fId) != 0) {
-   # Get the inputs of all filters
-   fList <- vector("list", length(fId))
-   for(i in 1:length(fId)) {
-    id <- fId[i]
-    fList[[i]] <- input[[id]]
-   }
-  }
-  print("output for the fIds"); print(fList); print("done"); print(length(fList)); print("done2")
-  getDat$fList <- fList
+  #Get filter input
+  fList <- getFiltInputs()
+  #Get loaded datasets and border:
   bdr <- loadedBdr()
-  dt <- stack(unlist(getDat$loadedDat))
-  print("and the data: "); print(length(dt)); print(dt); print("data, done")
-  # Get data from getAdminDat function, and loaded shapefile:
+  dt <- getAllLoadedData() %>% unlist() %>% stack
+  #Call getAdminDat function to extract data
   sp2 <- getAdminDat(bdr, dt, fList)
   
   # RenderUI for drill-down, if this options is available i.e if we have a level 3 shapefile
@@ -1101,22 +1087,8 @@ shinyServer(function(input, output, session) {
   # Getting border directly from function so as not to override existing level-2 border
   selB <- input$bdr
   ddBdr <- getRegion3(selB)
-  
   # Get filter inputs for data extraction and filtering
-  allDat <- allData()
-  # Get list of ids of server-generated filters
-  fId <- getNames(inputs = allDat, setting = "call.filters")
-  # remove rain_mth if rainfall is selected
-  if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
-  # do this only if data has been selected and loaded
-  if(length(fId) != 0) {
-   # Get the inputs of all filters
-   fList <- vector("list", length(fId))
-   for(i in 1:length(fId)) {
-    id <- fId[i]
-    fList[[i]] <- input[[id]]
-   }
-  }
+  fList <- getFiltInputs()
   det <- input$detail #Get level of detail selected (region/district)
   ddOnly <- input$ddwn #Wards or disticts selected for a drill-down
   # subset based on NAME_2 for level_2 shapefile
@@ -1127,7 +1099,7 @@ shinyServer(function(input, output, session) {
   else {
    ddBdr <- ddBdr[ddBdr@data$NAME_1 %in% ddOnly, ] #Subset shapefile to selected wards
   }
-  dt <- stack(unlist(getDat$loadedDat)) # Get loaded datasets
+  dt <- getAllLoadedData() %>% unlist() %>% stack() # Get loaded datasets
   ddData <- getAdminDat(ddBdr, dt, fList) #Extract data for these datasets
   
   # Before merging extracted data to shapefile we first change IDs on shapefile
@@ -1142,9 +1114,50 @@ shinyServer(function(input, output, session) {
   return(ddBdr)
  })
  
+ ### Generate a boxes green binary map###
+ 
+ ## Get loaded data & filter inputs, and use to combine rasters and return a
+ # single 1/NA raster for painting:
+ getMerged <- reactive ({
+  #Get filter inputs and loaded datasets:
+  fList <- getFiltInputs()
+  dt <- getAllLoadedData()
+  # Create stack
+  mgd <- getStack(dt, fList)
+  return(mgd)
+ })
+ 
+ ## Event observer for changes to filters ranges and refreshing map:
+ # when filters change, it's only the code under getMerged that runs
+ gtMgd <- eventReactive(input$refresh.map, { getMerged() })
+ 
+ ## Paint merged raster to show boxes
+ observeEvent(input$refresh.map, {
+  output$map <- renderLeaflet({
+   # grab the merged raster layer to plot
+   spMerged <- gtMgd()[[1]]
+   makeMap <- leaflet() %>% addTiles() 
+   
+   # assuming not everything has been filtered out, add raster layer
+   if(spMerged@data@min != Inf) {
+    
+    # Only passing in one color instead of a palette
+    pal1 <- colorNumeric("#006400", domain = values(spMerged),
+     na.color =  "#00000000")
+    
+    makeMap <- makeMap %>%
+     addRasterImage(spMerged, opacity = 0.5, colors = pal1, 
+      project = T)
+    getDat$downMap <- makeMap
+   }
+   return(makeMap)
+  })
+ })
+ 
+ ### Generate a districts green binary map ###
+ 
  # Add an eventReactive and observeEvent to stop distrcits map from auto-refreshing:
  getDistrR <- eventReactive(input$show.admin, {getAdminBdr()})
- 
  ## renderLeaflet to show admin boundaries(districts)
  observeEvent(input$show.admin,{
   output$map <- renderLeaflet({
@@ -1153,7 +1166,6 @@ shinyServer(function(input, output, session) {
      #Get loaded extracted and filtered data
      #also get selected shapefile and add our data to it
      bdr <- getDistrR()
-     print(head(bdr@data)); print(names(bdr@data))
      ## Create color palette
      pal2 <- colorNumeric("#006400", domain = bdr@data$DATA,
       na.color = "#00000000")
@@ -1184,29 +1196,32 @@ shinyServer(function(input, output, session) {
  })
  
  
- ## Chrolopleths based on only one of the selected datasets:
- # Generating a selectizeInput for the loaded datasets:
- showOpts <- reactive ({
-  #First get the loaded datasets:
-  dt <- getDat$loadedDat
-  if(!is.null(getDat$loadedRain)) {
-   dt <- c(dt, getDat$loadedRain)
+ ### Chrolopleths based on only one of the selected datasets###
+ 
+ ## Generating a selectizeInput for loaded datasets:
+ showOpts <- reactive({
+  #Get names of all selected data and resolution:
+  allDt <- allData(); res <- input$res
+  #Find names of selected data:
+  #Check if yield gap was selected; if so add selected crops to list of datasets:
+  if("_yieldgap" %in% allDt) {
+   allDt <- allDt[-which(allDt == "_yieldgap")]
+   yld <- input$yield_group
+   yld <- paste0(yld, "_yieldgap")
+   allDt <- c(allDt, yld)
   }
-  #Then we find their names to display for the user:
+  allDt <- paste0(allDt, ".tif")
   nms <- vector()
-  for(i in 1:length(dt)) {
-   x <- paste0(names(dt[[i]]), ".tif") #Get the dataset's name
-   pos <- match(x, f.range$var) #Find its position in filters_iqr (f.range)
-   y <- f.range$filt.name[pos] #Use pos to find the dataset's full name
-   nms[length(nms) + 1] <- y # Add it to the vector of names
-   
-  }
+  for(i in 1:length(allDt)){
+    pos <- match(allDt[i], f.range$var) #Find its position in filters_iqr (f.range)
+    y <- f.range$filt.name[pos] #Use pos to find the dataset's full name
+    nms[length(nms) + 1] <- y # Add it to the vector of names
+   }
+   #Now we create a selectizeInput with nms as options
+   rt <- selectizeInput("chloro.opts", label = "", choices = nms, multiple = F,
+    selected = nms[1])
+   return(rt)
   
-  #Now we create a selectizeInput with nms as options
-  rt <- selectizeInput("chloro.opts", label = "", choices = nms, multiple = F,
-   selected = nms[1])
-  
-  return(rt)
  })
  
  # Display the selectizeInput from showOpts above
@@ -1218,7 +1233,7 @@ shinyServer(function(input, output, session) {
   return(m)
  }) 
  
- # Show chrolopleth map in boxes format:
+ ## Show chrolopleth map in boxes format:
  #eventReactive that stops boxes chloropleth from autorefershing when
  # input option changes and before actionButton is clicked
  retrieveOptsBoxes <- eventReactive(input$chrolo.show, {getShowOpts()})
@@ -1309,18 +1324,13 @@ shinyServer(function(input, output, session) {
      mp1 <- gsub(pattern = ".tif", replacement = "", mp1)
      #Get the border shapefile earlier created:
      bdr <- getDistrR2()
-     print(head(bdr@data))
      #Then we locate the selected column from chrolopleth options:
      dt <- subset(bdr@data, select = mp1) %>% unlist() %>% as.numeric()
-     print("Before"); print(head(dt)); print(str(dt)); print(summary(dt)); print(class(dt))
-     
      #Create a color palette for the chrolopleth:
      dt1 <- format(dt, digits = 0) %>% as.numeric()
-     print("after"); print(head(dt1)); print(table(dt1))
      pal4 <- colorBin(palette = "YlGnBu", domain = dt1, bins = 7,
       pretty = F, na.color = "#00000000")
      incProgress(0.2, message = "Making map",detail = "Getting level of detail")
-     
      #Change border weight based on level of detail selected
      det <- input$detail #Get level of detail selected (region/district)
      wt <- 1
@@ -1343,8 +1353,7 @@ shinyServer(function(input, output, session) {
  )#End of observeEvent
  
  
- # Event reactive elements for both boxes and chrolopleth maps for drill-down
- # Both call wardDdn() but handle the output differently - boxes vs heat map
+ # Event reactive elements for both green map for drill-down
  wardDdn1 <- eventReactive(input$show.ddwn, {wardDdn()})
  
  # Rendering leaflet map for ward drill-down: 'boxes' map
