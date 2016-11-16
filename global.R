@@ -36,6 +36,10 @@ ctName <- countries[,2]
 regions <- c("East Africa", "South Africa", "West Africa", "All OAF countries",
  "Core OAF countries", "All of SSA", "Central Africa")
 
+# Crops whose yield gap we have:
+cropsYield <- c("Barley" = "barley", "Groundnut" = "groundnut", "Maize" = "maize",
+ "Potato" = "potato", "Rice" = "rice", "Soybean" = "soybean")
+
 #### define collapsable panel titles ####
 panel1 <- "Step 1: choose what you want to visualize"
 panel2 <- "Step 2: set your filters and map it!"

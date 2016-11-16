@@ -1,6 +1,6 @@
 #### BASIC INFO ####
 # boxes server script
-# last edited:  04 nov 2016 (bk)
+# last edited:  16 nov 2016 (bk)
 
 #### SET-UP #### 
 ## clear environment and console
@@ -9,11 +9,10 @@ rm(list = ls()); cat("\014")
 ## specify data directory 
 dd <- "data"; bpath <- paste (dd, "borders1", sep = "/")
 bpath1 <- paste(dd, "AdminBoundaries1", sep = "/")
-bpath2 <- paste(dd, "AdminBoundaries2", sep = "/")
 bpath3 <- paste(dd, "AdminBoundaries3", sep = "/")
 
 ## load data needed for initial mapping, etc. 
-# min/max specifications for each filter/resolution combo
+# min/max/label specifications for each filter/resolution combo
 f.range <- read.csv(paste(dd, "filterRanges_iqr_bk.csv", sep = "/"), header = T,
  stringsAsFactors = F)
 
@@ -38,6 +37,13 @@ getNames <- function(inputs, setting) {
    }
    toLoad <- toLoad[-which(toLoad == "mean_rm")]
    toLoad <- c(toLoad, addRain)
+  }
+  #Yield gap data will also be handled separately;
+  #load by selected crops instead of all at once (do the same for crop mix)
+  if("_yieldgap" %in% toLoad){
+    addYield <- NA
+   toLoad <- toLoad[-which(toLoad == "_yieldgap")]
+   toLoad <- c(toLoad, addYield)
   }
   if("Fertilizer consumption (kg/acre)" %in% toLoad) {
    if(setting == "make.filters") { addFert <- NA } 
@@ -116,7 +122,6 @@ getRange <- function (nm, res) {
  return (rt)
 }
 
-
 ## load selected region for cropping:
 getRegion <- function (reg) {
  # First we find the corresponding layer name:
@@ -172,7 +177,6 @@ getBool <- function(rast, rastfil) {
  return(rast$filt)
 }
 
-
 ## Function that combines 1/NA rasters for selected datasets to one for painting
 getStack <- function(rastlist, rastfil) {
  bools <- list()
@@ -185,7 +189,7 @@ getStack <- function(rastlist, rastfil) {
  return(bool.1)
 }
 
-## Function that creates character vectors for pop-ups for admin-level mapping:
+## Function that creates html elements for pop-ups for admin-level mapping:
 #Takes in extracted data (df with IDs, names, and names of each dataset as in fRange)
 getPops <- function (dt, namesDt) {
  n <- ncol(dt) - 1 #This eliminates the last col which was added for leaflet mapping
@@ -215,17 +219,20 @@ getPops <- function (dt, namesDt) {
  
  ##Round data to nearest whole numbers:
  dt <- format(dt, digits = 0, big.mark = ",")
- #xx <- dt[,1] %>% as.numeric(); xx <- xx(na.rm = T); print(head(xx))
+ print(head(dt))
  ##Get names for selected datasets:
+ #Names are same at all res, so using 5km res for all cases
  nms <- names(dt)
+ nms1 <- vector(length = length(nms)); print(nms)
  for(i in 1:length(nms)) {
   x <- nms[i]
-  nms[i] <- f.range$filt.name[which(f.range$var == paste0(x, ".tif"))] %>% 
-   as.character()
+  nms1[i] <- f.range$filt.name[which(f.range$var == paste0(x, ".tif") & 
+    f.range$res == "5km")] %>% as.character()
+  print(nms1[i])
  }
  
  ##Combine region and dataset names and apply to dt:
- nms <- c(nms2, nms)
+ nms <- c(nms2, nms1)
  dt <- cbind(rgns, dt)
  names(dt) <- nms
  
@@ -258,7 +265,6 @@ getAdminDat <- function(bdr, dt, fList){
  #Then filter
  for(i in 1:ncol(sp2)) {
   colN <- sp2[,i] %>% as.vector()
-  print(head(colN))
   for(j in 1:length(colN)) {
    #There are NaNs in our data, and they break the loop, so we make them NAs first
    if(!is.finite(colN[j])){
@@ -306,12 +312,12 @@ core.data.choices <- c(
  "Monthly rainfall (mean and volatility)" = "mean_rm",
  "Population (total)" = "sum_pop",
  "Rural population (density, pp/sq.km)" = "mean_r.pop.dense",
- "Est. avg. farm size (acre/hh)" = "mean_av.size",
- "Land use indicators*"
+ "Est. avg. farm size (acre/hh)" = "mean_av.size"
+ #"Land use indicators*"
 ) 
 crop.data.choices <- c(
  "Crop mix (% of cultivated area)*",
- "Yield gaps (ton/ha)*",
+ "Yield gaps (ton/ha)" = "_yieldgap",
  "Months of growing season" = "mean_gs.l",
  "Hybrid seed adoption (%)*",
  "Fertilizer consumption (kg/acre)", 
@@ -319,11 +325,11 @@ crop.data.choices <- c(
 )
 
 other.data.choices <- c( 
- "Soil fertility (nitrogen g/kg)*" = "mean_soil.n.",
+ "Soil fertility (nitrogen g/kg)" = "mean_soil.n", 
  "Soil fertility (carbon ppm)" = "mean_soil.c.", 
- "Elevation (m)" = "mean_elev", # TO DO: check units
- "Slope (degree)" = "mean_slp", # TO DO: check units
- "Land cover*" # TO DO: add units
+ "Elevation (m)" = "mean_elev",
+ "Slope (degree)" = "mean_slp" 
+ #"Land cover*" # TO DO: add units
 )
 
 #### SERVER ####
@@ -349,7 +355,7 @@ shinyServer(function(input, output, session) {
      selected = core.data.choices
     }
     else {
-     selected = c("mean_ann_rainf", "mean_r.pop.dense") # TO-DO: remove this
+     #selected = c("mean_ann_rainf", "mean_r.pop.dense") # TO-DO: remove this
     }
    ))
   dList[[2]] <- tags$div(title = "Crop data - metadata: \n 
@@ -417,29 +423,23 @@ shinyServer(function(input, output, session) {
  getAutoFilts <- reactive({
   # store resolution for future reference
   res <- input$res
-  
   # get a list of data to auto-generate sliders for
   # note that getNames already takes care of removing rainfall, soil,
   # and fertilizer consumption (the special cases that need separate
   # filter generation)
   fNames <- getNames(inputs = allData(), setting = "make.filters")
-  
   # only continue if fNames is not empty
   if(length(fNames) > 0) {
    # initialize list to input ranges
    fList <- vector("list", length(fNames))
-   
-   
    for (i in 1:length(fNames)) {
     # Get the min and max values for filter
     fRange <- getRange(fNames[i], res)
     mn <- as.numeric(fRange[1])
     mx <- as.numeric(fRange[2])
     vl <- c(mn, mx)
-    
-    
-    fList[[i]] <- list(sliderInput(fNames[i], label = fRange[[3]],
-     value = vl, min = mn, max = mx))
+    fList[[i]] <- list(sliderInput(fNames[i], label = fRange[3],
+     value = vl, min = mn, max = mx, step = 0.01))
    }
   } else {
    fList <- NULL
@@ -448,6 +448,51 @@ shinyServer(function(input, output, session) {
  })
  
  output$filters_auto <-  renderUI({ getAutoFilts() })
+ 
+ ## Generate yield gap filters:
+ #Step 1: generate checkboxgroupinput for selecting datasets of choice:
+ getYieldOpts <- reactive({
+  opts <- NULL
+  msg <- NULL
+  if("_yieldgap" %in% input$crop.data){
+   msg <- em("Before we set your map type, I noticed that you selected yield
+   gaps as one of your datasets. Please choose the crops whose yield gaps
+    you wish to see from the options below:")
+   opts <- checkboxGroupInput("yield_group", label = "", choices = cropsYield,
+    selected = "maize", width = "100%")
+  }
+  rt <- list(msg, opts)
+  return(rt)
+ })
+ 
+ output$yield_choices <- renderUI({ getYieldOpts() })
+ #Step 2: generate filters for the selected crops:
+ getYieldFilts <- reactive({
+  fLst <- NULL
+  if("_yieldgap" %in% input$crop.data) {
+   #Get res and selected crops
+   res <- input$res
+   yieldDat <- input$yield_group
+   #Create names matching names of raster files on files:
+   yieldDat <- paste0(yieldDat, "_yieldgap")
+   print(yieldDat)
+   #Get labels and filter ranges then create a filter for each selected crop:
+   if(length(yieldDat > 0)) {
+    fLst <- vector("list", length(yieldDat))
+    for(i in 1:length(yieldDat)) {
+     fRange <- getRange(yieldDat[i], res)
+     mn <- fRange[1] %>% as.numeric()
+     mx <- fRange[2] %>% as.numeric()
+     vl <- c(mn, mx)
+     fLst[[i]] <- list(sliderInput(yieldDat[i], label = fRange[3],
+      value = vl, min = mn, max = mx, step = 0.01))
+    }
+   }
+  }
+  return(fLst)
+ })
+ 
+ output$filters_yieldgap <- renderUI({ getYieldFilts() })
  
  ## generate rainfall filters
  # first, need to create widget for mth input, which will provide
@@ -467,6 +512,7 @@ shinyServer(function(input, output, session) {
    NULL
   }
  })
+ 
  getRainFilts2 <- reactive({
   # only do this once rainfall data has been selected; gives a console
   # error initially but doesn't affect UI and functioning after that
@@ -572,9 +618,7 @@ shinyServer(function(input, output, session) {
  ## render soil fertility (carbon) filters
  output$filters_soil_c <- renderUI({ getSoilCFilts() })
  
- ## TO DO: generate N soil fertility filters if datasets selected  
  ## TO DO: generate population type filters if datasets selected
- 
  
  ## Generate and render selectizeInput for countries/regions:
  getBordPanel <- reactive ({
@@ -586,28 +630,35 @@ shinyServer(function(input, output, session) {
  
  output$geoui <- renderUI({getBordPanel()})
  
- 
- ## define function to load selected data *except* rainfall data:
+ ## define function to load selected data *except* rainfall and yield gap data:
  loadedDat <- reactive({
+  det <- ""
+  if("mean_rm" %in% allData()) {
+   det <- "Skipping rainfall for now"}
+  else if("_yieldgap" %in% allData()) {
+   det <- "Skipping yield gap for now"}
+  else if("mean_rm" %in% allData() & "_yieldgap" %in% allData()) {
+   det <- "Skipping rainfall and yield gap data for now"}
+  
   withProgress(message = "Loading data...", value = 0,
-   detail = ifelse("mean_rm" %in% allData(), 
-    "skipping rainfall for now", ""), {
-     # specify resolution sub-directory and borders based on user input
-     pth <- paste(dd, input$res, sep = "/")
-     bdr <- loadedBdr()
-     incProgress(0.2, detail = "setting your boundaries")
-     # create vector of unique data set names to load
-     toLoad <- getNames(inputs = allData(), setting = "load.data")
-     
-     toLoad <- toLoad[!is.na(toLoad)]
-     
-     incProgress(0.2, detail = "grabbing your files")
-     
-     # load data sets that are cropped to chosen border
-     loadedDat <- loadDat(pth, toLoad, bdr)
-     incProgress(0.6, detail = "woot - all data loaded!")
-     return(loadedDat)
-    })
+   detail = det, {
+    # specify resolution sub-directory and borders based on user input
+    pth <- paste(dd, input$res, sep = "/")
+    bdr <- loadedBdr()
+    incProgress(0.2, detail = "setting your boundaries")
+    # create vector of unique data set names to load
+    toLoad <- getNames(inputs = allData(), setting = "load.data")
+    
+    toLoad <- toLoad[!is.na(toLoad)]
+    
+    incProgress(0.2, detail = "grabbing your files")
+    
+    # load data sets that are cropped to chosen border
+    loadedDat <- loadDat(pth, toLoad, bdr)
+    # loadedDat <- loadDat(pth, toLoad)
+    incProgress(0.6, detail = "woot - all data loaded!")
+    return(loadedDat)
+   })
  }) 
  
  ## Alert for high-res datasets; warns user on loading time
@@ -695,11 +746,13 @@ shinyServer(function(input, output, session) {
      # load data sets that are cropped to chosen border
      loadedDat <- loadDat(pth, toLoad, bdr)
      incProgress(0.6, detail = "woot - all data loaded!")
+     print(loadedDat)
      return(loadedDat)
     })
   }
  }) 
- observeEvent(input$refresh.map, { 
+ 
+ observeEvent(input$submit.data, { 
   # show an alert to calm people about loading rain time
   if(("mean_rm" %in% allData()) & !is.null(input$rain_mth)) {
    createAlert(session, anchorId = "loadingRainAlert", 
@@ -713,6 +766,8 @@ shinyServer(function(input, output, session) {
   }
  })
  
+ ## Load
+ 
  ## Get input for each filter and use input to combine rasters and return a
  # single 1/NA raster for painting:
  getMerged <- reactive ({
@@ -724,7 +779,7 @@ shinyServer(function(input, output, session) {
   fId <- getNames(inputs = allDat, setting = "call.filters")
   # remove rain_mth if rainfall is selected
   if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
-  
+  print(fId)
   # do this only if data has been selected and loaded
   if(length(fId) != 0) {
    # Get the inputs of all filters
@@ -734,7 +789,6 @@ shinyServer(function(input, output, session) {
     fList[[i]] <- input[[id]]
    }
   }
-  
   # Get selected datasets
   # if user only selected rainfall
   if(length(allDat) == 1 & ("mean_rm" %in% allDat)) {
@@ -747,11 +801,17 @@ shinyServer(function(input, output, session) {
     dt <- c(dt, getDat$loadedRain)
    }    
   }
-  
+  dt1 <- unlist(dt) %>% stack()
+  print(names(dt1))
   # Create stack
   mgd <- getStack(dt, fList)
   return(mgd)
  })
+ 
+ ## WIP (BK): observeEvent for filter inputs
+ #Listens to data submit button, and ignores inputs for filters whose data
+ #was not loaded
+ 
  
  ## Event observer for changes to filters ranges and refreshing map:
  # when filters change, it's only the code under getMerged that runs
@@ -785,32 +845,112 @@ shinyServer(function(input, output, session) {
   # Get the input border name, and level of detail from districts mapping portion:
   selB <- input$bdr
   det <- input$detail
+  mapOpt <- input$boxes_admin
   # Create a null object (to which we'll assign a border then return)
   tr <- NULL
   # Check if a region is selected and load separately (readOGR) then return
   if(selB %in% regions) {
    tr <- getRegion(selB)
-   return(tr)
-  }
+   return(tr)}
   # Else if it's a country use readRDS and return border
   else {
-   # If detail is 'Regional' load level-1 shapefile(s)
-   if(det == "Regional") {
-    tr <- getRegion1(selB)
+   # If the map option is admin-based map:
+   if(mapOpt == "Admin-based Map") {
+    # If detail is 'Regional' load level-1 shapefile(s)
+    if(det == "Regional" ) {
+     tr <- getRegion1(selB)}
+    else if (det == "District"){
+     #Else load level-2 shapefile(s)
+     tr <- getRegion2(selB) }
+    else if(det == "Ward") {
+     #Otherwise load level-3 shapefile(s) for a drill-down
+     tr <- getRegion3(selB)}
    }
-   else if (det == "District"){
-    #Else load level-2 shapefile(s)
-    tr <- getRegion2(selB) 
-   }
-   else if(det == "Ward") {
-    #Otherwise load level-3 shapefile(s) for a drill-down
-    tr <- getRegion3(selB)
-   }
+   #Otherwise for boxes map just load the level 1 shapefile since this doesn't
+   #affect mapping for boxes
+   else {
+    tr <- getRegion1(selB)}
   }
   return(tr)
  })
  
  ### Creating UI outputs:
+ 
+ ##uiOutput for choosing a variable for a heatmap:
+ selChlVar <- reactive ({
+  x <- NULL; y <- NULL
+  opt <- input$map_type
+  if(opt == "Heat Map") {
+   x <- em("Select one variable whose heat map you wish to see")
+   y <- showOpts() }
+  rtn <- list (x, y)
+  return(rtn)
+ })
+ 
+ ##renderUi for heatmap var selection:
+ output$heatMap_opts <- renderUI({ selChlVar() })
+ 
+ ##Show level-of-detail options only if districts mapping is selected:
+ detOpts <- reactive ({
+  #Get map type 1 options (boxes or districts)
+  mapOpt <- input$boxes_admin
+  rtn <- NULL
+  if(mapOpt == "Admin-based Map") {
+   msg <- em("For an admin-based map, please select the level of detail you'd like
+    to see; the Regional option is less detailed than the Districts option")
+   sel <- selectInput("detail", label = h5(strong("Summary level of detail:")), 
+    choices = list("Regional","District"), selected = "Regional")
+   rtn <- list(msg, sel)
+  }
+  return(rtn)
+ })
+ 
+ ##renderUI for level-of-detail options:
+ output$detail <- renderUI({ detOpts() })
+ 
+ ##Generate UI actionButtons based on selected map types:
+ chooseButton <- reactive({
+  #Get map type 1 (boxes or districts)
+  mapOpt <- input$boxes_admin
+  #Get map type 2 (green map or heat map)
+  mapType <- input$map_type
+  rtn <- NULL
+  if(mapOpt == "Boxes Map") {
+   if(mapType == "Binary Green Map") {
+    rtn <- actionButton("refresh.map", label = "Generate boxes binary green map!",
+     width = "100%") }
+   else {
+    rtn <- actionButton("chrolo.show", label = "Generate boxes heat map!",
+     width = "100%") }
+  }
+  else if(mapOpt == "Admin-based Map"){
+   if(mapType == "Binary Green Map") {
+    rtn <- actionButton("show.admin", label = "Generate admin-based binary green map!",
+     width = "100%") }
+   else {
+    rtn <- actionButton("admin.chloro",label = "Show admin-based heat map!",
+     width = "100%") }
+  }
+  return(rtn)
+ })
+ 
+ ##renderUI for actionButton:
+ output$set_button <- renderUI({ chooseButton() })
+ 
+ ##Choosing between boxes and chrolopleth for drill-down option
+ drillDownGeoType <- reactive ({
+  bt <- NULL
+  mapType <- input$map_type
+  if(mapType == "Binary Green Map") {
+   bt <- actionButton("show.ddwn", label = "Display selected wards as green map",
+    width = "100%")
+  }
+  else if(mapType == "Heat Map") {
+   bt <- actionButton("show.ddwn2", label = "Display selected wards as heat map",
+    width = "100%")
+  }
+  return(bt)
+ })
  
  ##Create a selectIze input + actionButton that will be rendered once
  # data extraction has been done for districts mapping, for a drill-down option
@@ -824,57 +964,9 @@ shinyServer(function(input, output, session) {
   return(rt)
  })
  
- #Choosing between boxes and chrolopleth for drill-down option
- drillDownGeoType <- reactive ({
-  bt <- NULL
-  rdOpt <- input$mapType
-  if(rdOpt == "Boxes") {
-   bt <- actionButton("show.ddwn", label = "Display selected wards as boxes")
-  }
-  else if(rdOpt == "Heat map") {
-   bt <- actionButton("show.ddwn2", label = "Display selected wards as heat map")
-  }
-  return(bt)
- })
- 
- ## generate and render action buttons for boxes/districts chrolopleth/normal
- # green map based on choice of radio button:
- # For boxes first:
- getChoiceButton1 <- reactive({
-  rdOpt <- input$mapType
-  rtn <- NULL
-  if(rdOpt == "Boxes") {
-   rtn <- actionButton("refresh.map", label = "Generate boxes map!")
-  }
-  else if(rdOpt == "Heat map") {
-   x <- em("Select one variable whose heat map you wish to see")
-   y <- showOpts()
-   z <- actionButton("chrolo.show", label = "Show boxes heat map")
-   
-   rtn <- list(x,y,z)
-  }
-  return(rtn)
- })
- output$boxes_opts <- renderUI ({getChoiceButton1()})
- 
- #Then districts part: 
- getChoiceButton2 <- reactive({
-  rdOpt <- input$mapType #Get radio button input
-  rtn <- NULL #Placeholder (assignment inside if statements below)
-  if(rdOpt == "Boxes") {
-   rtn <- actionButton("show.admin", label = "Generate filter map")
-  }
-  else if(rdOpt == "Heat map") {
-   x <- em("Select one variable whose heat map you wish to see")
-   y <- showOpts()
-   z <- actionButton("admin.chloro",label = "Show districts heat map")
-   rtn <- list(x,y,z)
-  }
-  return(rtn)
- })
- output$districts_opts <- renderUI ({getChoiceButton2()})
  
  #  ## WIP: Estimating the market size for selected drilldown regions:
+ #Problem: selection of one dataset loses raster name (find fix for this first)
  #  getMarketSize <- reactive({
  #   #Get extracted data and check if pop data is present
  #   pop <- "sum_pop.tif"
@@ -938,8 +1030,8 @@ shinyServer(function(input, output, session) {
   })
  )
  
- 
  ## reactive that generates a border file for leaflet based on level of detail
+ # Also renders drilldown option if available
  getAdminBdr <- reactive({
   ## Filter extracted values to filter ranges:
   # First get the filters (code from getMerged):
@@ -947,6 +1039,7 @@ shinyServer(function(input, output, session) {
   allDat <- allData()
   # Get list of ids of server-generated filters
   fId <- getNames(inputs = allDat, setting = "call.filters")
+  print(fId); print("and"); print(allDat)
   # remove rain_mth if rainfall is selected
   if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
   # do this only if data has been selected and loaded
@@ -958,10 +1051,11 @@ shinyServer(function(input, output, session) {
     fList[[i]] <- input[[id]]
    }
   }
-  
+  print("output for the fIds"); print(fList); print("done"); print(length(fList)); print("done2")
   getDat$fList <- fList
   bdr <- loadedBdr()
   dt <- stack(unlist(getDat$loadedDat))
+  print("and the data: "); print(length(dt)); print(dt); print("data, done")
   # Get data from getAdminDat function, and loaded shapefile:
   sp2 <- getAdminDat(bdr, dt, fList)
   
@@ -1048,63 +1142,31 @@ shinyServer(function(input, output, session) {
   return(ddBdr)
  })
  
- # Event reactive elements for both boxes and chrolopleth maps for drill-down
- # Both call wardDdn() but handle the output differently - boxes vs heat map
- wardDdn1 <- eventReactive(input$show.ddwn, {wardDdn()})
- wardDdn2 <- eventReactive(input$show.ddwn2, {wardDdn()})
- 
- # Rendering leaflet map for ward drill-down: 'boxes' map
- observeEvent(input$show.ddwn, {
-  output$map <- renderLeaflet({
-   withProgress( message = "Loading map", detail = "Getting your data", value = 0, {
-   #Get loaded extracted and filtered data
-   #also get selected shapefile and add our data to it
-   bdr <- wardDdn1()
-   ## Create color palette
-   pal2 <- colorNumeric("#006400", domain = bdr@data$DATA,
-    na.color = "#00000000")
-   ## Now create map and return map
-     incProgress(0.5, detail = "Now creating map")
-     makeMap <- leaflet(bdr) %>% addTiles() %>% 
-      addPolygons(stroke = T,fill = T, fillColor = pal2(bdr@data$DATA), fillOpacity = 0.5,
-       smoothFactor = F, color = "white", weight = 2, dashArray = 3, 
-       opacity = 0.5, popup = getPops(bdr@data, names(bdr@data)))
-     
-     #Save map for download:
-     #getDat$downMap <- saveWidget(widget = makeMap, file = "map.png", selfcontained = F)
-     getDat$downMap <- makeMap
-     incProgress(0.5, detail = "BOOM") 
-     return(makeMap) #Then display map
-    })#End of withProgress
-  })#End of renderLeaflet
- }
- )
- 
  # Add an eventReactive and observeEvent to stop distrcits map from auto-refreshing:
  getDistrR <- eventReactive(input$show.admin, {getAdminBdr()})
- 
  
  ## renderLeaflet to show admin boundaries(districts)
  observeEvent(input$show.admin,{
   output$map <- renderLeaflet({
    withProgress(message = "Creating map:", detail = "Getting data", 
     value = 0, {
-   #Get loaded extracted and filtered data
-   #also get selected shapefile and add our data to it
-   bdr <- getDistrR()
-   ## Create color palette
-   pal2 <- colorNumeric("#006400", domain = bdr@data$DATA,
-    na.color = "#00000000")
-   incProgress(0.3, detail = "Getting level of detail (region/district)")
-   det <- input$detail #Get level of detail selected (region/district)
-   wt <- 1
-   #Change border weight based on level of detail selected
-   if(det == "District") {
-    wt <- 1.5 #Make border thicker for districts level map
-   }
-   
-   ## Now create map and return map
-   incProgress(0.5, detail = "Now making your map; almost there!")
+     #Get loaded extracted and filtered data
+     #also get selected shapefile and add our data to it
+     bdr <- getDistrR()
+     print(head(bdr@data)); print(names(bdr@data))
+     ## Create color palette
+     pal2 <- colorNumeric("#006400", domain = bdr@data$DATA,
+      na.color = "#00000000")
+     incProgress(0.3, detail = "Getting level of detail (region/district)")
+     det <- input$detail #Get level of detail selected (region/district)
+     wt <- 1
+     #Change border weight based on level of detail selected
+     if(det == "District") {
+      wt <- 1.5 #Make border thicker for districts level map
+     }
+     
+     ## Now create map and return map
+     incProgress(0.5, detail = "Now making your map; almost there!")
      makeMap <- leaflet(bdr) %>% addTiles() %>% 
       addPolygons(stroke = T,fill = T, fillColor = pal2(bdr@data$DATA), fillOpacity = 0.5,
        smoothFactor = F, color = "white", weight = wt, dashArray = 3, 
@@ -1200,12 +1262,12 @@ shinyServer(function(input, output, session) {
    print(ncell(mp)); print(summary(mp))
    print(fList[[1]][1]); print(fList[[1]][2])
    mp[mp <= fList[[1]][1] & mp >= fList[[1]][2]] <- NA
-#    print(ncell(rastfilt)); print(summary(rastfilt))
-#    print("---------")
-#    print(ncell(mp)); print(summary(mp))
+   #    print(ncell(rastfilt)); print(summary(rastfilt))
+   #    print("---------")
+   #    print(ncell(mp)); print(summary(mp))
    # mp <- ifelse((mp >= fList[[1]][1] & mp <= fList[[1]][2]), mp, NA)
-#    rastfilt[rastfilt == T] <- mp
-#    rastfilt[rastfilt == F] <- NA
+   #    rastfilt[rastfilt == T] <- mp
+   #    rastfilt[rastfilt == F] <- NA
    #    #mp <- getBool(mp, fList)
    # mp <- rastfilt
    print("+++++++++")
@@ -1231,90 +1293,127 @@ shinyServer(function(input, output, session) {
  })
  
  ## Display chrolopleth map for districts mapping:
+ #eventReactives to prevent autorefreshing:
  getDistrR2 <- eventReactive(input$admin.chloro, {getAdminBdr()})
  retrieveOptsDistr <- eventReactive(input$admin.chloro, {getShowOpts()})
- 
+ #Rendering chloropleth leaflet for districts:
  observeEvent(input$admin.chloro,
   output$map <- renderLeaflet({
    withProgress(message = "Creating map:", detail = "Getting data", 
     value = 0, {
-   #Reverse process for displaying chrolopleth options to get dataset names
-   m <- retrieveOptsDistr()  # Get input
-   # use input name to get raster name:
-   pos <- match(m, f.range$filt.name)
-   mp1 <- f.range$var[pos]
-   mp1 <- gsub(pattern = ".tif", replacement = "", mp1)
-   
-   #Get the border shapefile earlier created:
-   bdr <- getDistrR2()
-   #Then we locate the selected column from chrolopleth options:
-   dt <- subset(bdr@data, select = mp1) %>% unlist() %>% as.numeric()
-   #RdYlGn YlGnBu
-   #Create a color palette for the chrolopleth:
-   #dt <- format(dt, digits = 0, big.mark = ",") %>% as.numeric(); print(head(dt))
-   pal4 <- colorBin(palette = "YlGnBu", domain = dt, bins = 7,
-    pretty = F, na.color = "#00000000")
-   incProgress(0.2, message = "Making map",detail = "Getting level of detail")
-   det <- input$detail #Get level of detail selected (region/district)
-   wt <- 1
-   #Change border weight based on level of detail selected
-   if(det == "District") {
-    wt <- 1.5 #Make border thicker for districts level map
-   }
-   #Now we create a leaflet map:
-   incProgress(0.4, message = "Making map", detail = "Now creating map. Hold on!")
-   makeMap <- leaflet(bdr) %>% addTiles() %>% 
-    addPolygons(stroke = T,fill = T, fillColor = pal4(dt), fillOpacity = 0.5,
-     smoothFactor = F, color = "white", weight = wt, dashArray = 3, 
-     opacity = 0.5, popup = getPops(bdr@data, names(bdr@data))) %>% 
-    addLegend(position = "bottomright", pal = pal4, values = dt,
-     na.label = "Missing", title = "Map Key:")
-   getDat$downMap <- makeMap
-   incProgress(0.4, message = "BOOM!")
-   return(makeMap)
-  }) # End of progress
+     #Reverse process for displaying chrolopleth options to get dataset names
+     m <- retrieveOptsDistr()  # Get input
+     # use input name to get raster name:
+     pos <- match(m, f.range$filt.name)
+     mp1 <- f.range$var[pos]
+     mp1 <- gsub(pattern = ".tif", replacement = "", mp1)
+     #Get the border shapefile earlier created:
+     bdr <- getDistrR2()
+     print(head(bdr@data))
+     #Then we locate the selected column from chrolopleth options:
+     dt <- subset(bdr@data, select = mp1) %>% unlist() %>% as.numeric()
+     print("Before"); print(head(dt)); print(str(dt)); print(summary(dt)); print(class(dt))
+     
+     #Create a color palette for the chrolopleth:
+     dt1 <- format(dt, digits = 0) %>% as.numeric()
+     print("after"); print(head(dt1)); print(table(dt1))
+     pal4 <- colorBin(palette = "YlGnBu", domain = dt1, bins = 7,
+      pretty = F, na.color = "#00000000")
+     incProgress(0.2, message = "Making map",detail = "Getting level of detail")
+     
+     #Change border weight based on level of detail selected
+     det <- input$detail #Get level of detail selected (region/district)
+     wt <- 1
+     if(det == "District") {
+      wt <- 1.5 #Make border thicker for districts level map
+     }
+     #Now we create a leaflet map:
+     incProgress(0.4, message = "Making map", detail = "Now creating map. Hold on!")
+     makeMap <- leaflet(bdr) %>% addTiles() %>% 
+      addPolygons(stroke = T,fill = T, fillColor = pal4(dt), fillOpacity = 0.5,
+       smoothFactor = F, color = "white", weight = wt, dashArray = 3, 
+       opacity = 0.5, popup = getPops(bdr@data, names(bdr@data))) %>% 
+      addLegend(position = "bottomright", pal = pal4, values = dt1,
+       na.label = "Missing", title = "Map Key:")
+     getDat$downMap <- makeMap
+     incProgress(0.4, message = "Yay!", detail = "BOOM!")
+     return(makeMap)
+    }) # End of progress
   })#End of renderLeaflet
  )#End of observeEvent
+ 
+ 
+ # Event reactive elements for both boxes and chrolopleth maps for drill-down
+ # Both call wardDdn() but handle the output differently - boxes vs heat map
+ wardDdn1 <- eventReactive(input$show.ddwn, {wardDdn()})
+ 
+ # Rendering leaflet map for ward drill-down: 'boxes' map
+ observeEvent(input$show.ddwn, {
+  output$map <- renderLeaflet({
+   withProgress( message = "Loading map", detail = "Getting your data", value = 0, {
+    #Get loaded extracted and filtered data
+    #also get selected shapefile and add our data to it
+    bdr <- wardDdn1()
+    ## Create color palette
+    pal2 <- colorNumeric("#006400", domain = bdr@data$DATA,
+     na.color = "#00000000")
+    ## Now create map and return map
+    incProgress(0.5, detail = "Now creating map")
+    makeMap <- leaflet(bdr) %>% addTiles() %>% 
+     addPolygons(stroke = T,fill = T, fillColor = pal2(bdr@data$DATA), fillOpacity = 0.5,
+      smoothFactor = F, color = "white", weight = 2, dashArray = 3, 
+      opacity = 0.5, popup = getPops(bdr@data, names(bdr@data)))
+    
+    #Save map for download:
+    #getDat$downMap <- saveWidget(widget = makeMap, file = "map.png", selfcontained = F)
+    getDat$downMap <- makeMap
+    incProgress(0.5, detail = "BOOM") 
+    return(makeMap) #Then display map
+   })#End of withProgress
+  })#End of renderLeaflet
+ }
+ )
  
  ## Chrolopleth leaflet option for map drill-down:
  # eventReactive to stop map from autorefreshing:
  # retrieveOpts are separated despite originating from same reactive (getShowOpts)
  # since the actionButtons are different
  retrieveOptsWard <- eventReactive(input$show.ddwn2, {getShowOpts()})
+ wardDdn2 <- eventReactive(input$show.ddwn2, {wardDdn()})
  # observeEvent for ward chloropleth
  observeEvent(input$show.ddwn2, {
   output$map <- renderLeaflet({
    withProgress(message = "Creating map:", detail = "Getting data", 
     value = 0, {
-   #Reverse process for displaying chrolopleth options to get dataset names
-   m <- retrieveOptsWard() # Get input
-   # use input name to get raster name:
-   pos <- match(m, f.range$filt.name)
-   mp1 <- f.range$var[pos]
-   mp1 <- gsub(pattern = ".tif", replacement = "", mp1)
-   
-   #Get the border shapefile earlier created:
-   bdr <- wardDdn2()
-   incProgress(0.3, message = "Now making your map; hold on!")
-   #Then we locate the selected column from chrolopleth options:
-   dt <- subset(bdr@data, select = mp1) %>% unlist() %>% as.numeric()
-   #dt <- format(dt, digits = 0, big.mark = ",")
-   #Create a color palette for the chrolopleth:
-   pal4 <- colorBin(palette = "YlGnBu", domain = dt, bins = 7,
-    pretty = F, na.color = "#00000000")
-   incProgress(0.3, message = "Almost there!")
-   #Now we create a leaflet map:
-   makeMap <- leaflet(bdr) %>% addTiles()
-    makeMap <- makeMap %>% addPolygons(stroke = T,fill = T, fillColor = pal4(dt), fillOpacity = 0.5,
-     smoothFactor = F, color = "white", weight = 2, dashArray = 3, 
-     opacity = 0.5, popup = getPops(bdr@data, names(bdr@data)))
-    incProgress(0.2, message = "A few more secs")
-    makeMap <- makeMap %>% addLegend(position = "bottomright", pal = pal4, values = dt,
-     na.label = "Missing", title = "Map Key:")
-   getDat$downMap <- makeMap
-   incProgress(0.2, message = "BOOM!")
-   return(makeMap)
-  }) #End of progress   
+     #Reverse process for displaying chrolopleth options to get dataset names
+     m <- retrieveOptsWard() # Get input
+     # use input name to get raster name:
+     pos <- match(m, f.range$filt.name)
+     mp1 <- f.range$var[pos]
+     mp1 <- gsub(pattern = ".tif", replacement = "", mp1)
+     
+     #Get the border shapefile earlier created:
+     bdr <- wardDdn2()
+     incProgress(0.3, message = "Now making your map; hold on!")
+     #Then we locate the selected column from chrolopleth options:
+     dt <- subset(bdr@data, select = mp1) %>% unlist() %>% as.numeric()
+     #dt <- format(dt, digits = 0, big.mark = ",")
+     #Create a color palette for the chrolopleth:
+     pal4 <- colorBin(palette = "YlGnBu", domain = dt, bins = 7,
+      pretty = F, na.color = "#00000000")
+     incProgress(0.3, message = "Almost there!")
+     #Now we create a leaflet map:
+     makeMap <- leaflet(bdr) %>% addTiles()
+     makeMap <- makeMap %>% addPolygons(stroke = T,fill = T, fillColor = pal4(dt), fillOpacity = 0.5,
+      smoothFactor = F, color = "white", weight = 2, dashArray = 3, 
+      opacity = 0.5, popup = getPops(bdr@data, names(bdr@data)))
+     incProgress(0.2, message = "A few more secs")
+     makeMap <- makeMap %>% addLegend(position = "bottomright", pal = pal4, values = dt,
+      na.label = "Missing", title = paste("Map Key:", m))
+     getDat$downMap <- makeMap
+     incProgress(0.2, message = "BOOM!")
+     return(makeMap)
+    }) #End of progress   
   })#End of renderLeaflet
   
  })
