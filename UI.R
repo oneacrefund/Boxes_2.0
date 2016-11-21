@@ -1,27 +1,6 @@
 #### BASIC INFO ####
 # boxes server script
-# last edited: 01 nov 2016 (bk)
-
-#### formatting to do list for version 2 #### 
-# hover text
-# make server-generated filter labels more user-friendly
-# fertilizer consumption: convert from kg to ton?
-# rainfall volatility sliders --> turn decimal into %
-# make team bundle radio buttons prettier
-# add OAF logo to title panel
-# find a way to make title centered and "Boxes" bold
-
-#### missing data to add for version 2 ####
-# crop mix
-# population types (i.e. rural, urban, peri-urban); 
-# looks like mean_p.pop, mean_r.pop, and mean_u.pop are for peri-urban, 
-# rural, and urban (but currently are only in the 5km resolution)
-# land use indicators
-# land cover
-# yield gaps
-# hybrid seed adoption
-# fertilizer application rates (probably not reliable data)
-# nitrogen soil fertility
+# last edited: 18 nov 2016 (bk)
 
 #### other to dos for version 2 ####
 # consider nixing growing seasons and total pop from filters (included for now for simplicity, but is probably tough for users to actually change meaningfully)
@@ -50,7 +29,7 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
      fluidRow(
       column(width = 6,
        h4(strong("A: SELECT DATA"), align = "center",
-        style = "color:firebrick"), tags$hr(),
+        style = "color:#006400"), tags$hr(),
        fluidRow(
         # input data by variable
         column(width = 6, 
@@ -81,7 +60,7 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
       ), 
       column(width = 6,
        h4(strong("B: SELECT GEOGRAPHY"), align = "center",
-        style = "color:firebrick"), tags$hr(), 
+        style = "color:#006400"), tags$hr(), 
        fluidRow(
         # input resolution
         column(width = 6,
@@ -113,7 +92,7 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
        #Setting map type:
        fluidRow(
         h4(strong("C: SET MAP TYPE:"), align = "center",
-         style = "color:firebrick"), tags$hr(),
+         style = "color:#006400"), tags$hr(),
         column(width = 5,
          style = "background-color:#f2f6f9",
          #Section 1: selecting between boxes and districts map:         
@@ -145,17 +124,10 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
        fluidRow(
         column(width = 12,
          actionButton("submit.data",
-          label = "Done? Click Me!")
+          label = "Done? Click Me!", width = "50%", style = "align:center")
         ),
-        # TO DO: make this helpText pop up only after submit.data is clicked 
         
         column(width = 12,
-         br(),
-         em(strong("* means this feature currently not fully functional:",  
-          style = "color:firebrick")), 
-         br(),
-         em("thus, please do not try to run the app with any of these features yet",
-          style = "color:firebrick"),
          br(),
          bsAlert("dataAlert"),
          br(),

@@ -315,9 +315,8 @@ crop.data.choices <- c(
  "Crop mix (% of cultivated area)*",
  "Yield gaps (ton/ha)" = "_yieldgap",
  "Months of growing season" = "mean_gs.l",
- "Hybrid seed adoption (%)*",
- "Fertilizer consumption (kg/acre)", 
- "Fertilizer application rates*" # TO DO: add units
+ "Fertilizer consumption (kg/acre)" 
+ #"Fertilizer application rates*" # TO DO: add units
 )
 
 other.data.choices <- c( 
@@ -369,8 +368,7 @@ shinyServer(function(input, output, session) {
       grep("Fertilizer consumption (kg/acre)", x = crop.data.choices, 
        value = F),
       grep("Crop mix", x = crop.data.choices, value = F),
-      grep("Hybrid seed", x = crop.data.choices, value = F),
-      grep("Yield gaps", x = crop.data.choices, value = F))]
+      grep("_yieldgap", x = crop.data.choices, value = F))]
     } else if("New Country Expansion" %in% input$team.data) { 
      # TO DO: adjust grep for crop mix when data included
      selected = crop.data.choices[c(
@@ -1203,6 +1201,14 @@ shinyServer(function(input, output, session) {
   #Get names of all selected data and resolution:
   allDt <- allData(); res <- input$res
   #Find names of selected data:
+  #Check if monthly rainfall data was selected and adjust:
+  if("mean_rm" %in% allDt) {
+   allDt <- allDt[-which(allDt == "mean_rm")]
+   mth <- input$rain_mth
+   rn <- c("mean_rm_", "mean_rvol_"); rn <- paste0(rn, mth)
+   allDt <- c(allDt, rn)
+   
+  }
   #Check if yield gap was selected; if so add selected crops to list of datasets:
   if("_yieldgap" %in% allDt) {
    allDt <- allDt[-which(allDt == "_yieldgap")]
@@ -1243,12 +1249,14 @@ shinyServer(function(input, output, session) {
   output$map <- renderLeaflet( {
    #Get input from selectizeInput, and reverse above process to get raster file
    m <- retrieveOptsBoxes()
-   #m <- input$chloro.opts # Get input
-   # use input name to get raster name and fetch it among loaded data
+   #Get filter input for selected dataset, and filter the data before mapping:
+   fList <- getFiltInputs()
+   #Get loaded data:
+   dt <- getAllLoadedData()
+   # use m to get raster name and fetch it among loaded data
    pos <- match(m, f.range$filt.name)
    mp1 <- f.range$var[pos]
    mp1 <- gsub(pattern = ".tif", replacement = "", mp1)
-   dt <- c(getDat$loadedDat, getDat$loadedRain)
    mp <- NULL; pos1 <- NULL
    for(i in 1:length(dt)) {
     if(names(dt[[i]]) == mp1){
@@ -1257,37 +1265,9 @@ shinyServer(function(input, output, session) {
      break()
     }
    }
-   
-   #Get filter input for selected dataset, and filter the data before mapping:
-   # Get filter inputs for data extraction and filtering
-   allDat <- allData()
-   # Get list of ids of server-generated filters
-   fId <- getNames(inputs = allDat, setting = "call.filters")
-   # remove rain_mth if rainfall is selected
-   if("rain_mth" %in% fId) { fId <- fId[-which(fId == "rain_mth")] }
-   # do this only if data has been selected and loaded
-   fList <- NULL
-   if(length(fId) != 0) {
-    # Get the input of filter corresponding to selected dataset
-    id <- fId[pos1]
-    fList[[length(fList) + 1]] <- input[[id]]
-   }
-   #pass filter and raster to getBool for filtering
-   # rastfilt <- (mp >= fList[[1]][1] & mp <= fList[[1]][2])
-   print(ncell(mp)); print(summary(mp))
-   print(fList[[1]][1]); print(fList[[1]][2])
-   mp[mp <= fList[[1]][1] & mp >= fList[[1]][2]] <- NA
-   #    print(ncell(rastfilt)); print(summary(rastfilt))
-   #    print("---------")
-   #    print(ncell(mp)); print(summary(mp))
-   # mp <- ifelse((mp >= fList[[1]][1] & mp <= fList[[1]][2]), mp, NA)
-   #    rastfilt[rastfilt == T] <- mp
-   #    rastfilt[rastfilt == F] <- NA
-   #    #mp <- getBool(mp, fList)
-   # mp <- rastfilt
-   print("+++++++++")
-   print(ncell(mp)); print(summary(mp))
-   
+   #Filter data from raster:
+   mp[ mp <= fList[[1]][1] ] <- NA
+   mp[ mp >= fList[[1]][2] ] <- NA
    #Create a color palette for use in painting the map:
    #Start with getting the filter ranges to eliminate outliers
    rg <- getRange(mp1, input$res)
@@ -1299,7 +1279,7 @@ shinyServer(function(input, output, session) {
    makeMap <- leaflet() %>% addTiles() %>% 
     addRasterImage(mp, opacity = 0.7, colors = pal3, project = T) %>% 
     addLegend(position = "bottomright", pal = pal3, values = rg,
-     na.label = "Missing", title = "Map Key:")
+     na.label = "Missing", title = paste("Map Key:", m))
    #And return the map
    getDat$downMap <- makeMap
    return(makeMap)
@@ -1344,7 +1324,7 @@ shinyServer(function(input, output, session) {
        smoothFactor = F, color = "white", weight = wt, dashArray = 3, 
        opacity = 0.5, popup = getPops(bdr@data, names(bdr@data))) %>% 
       addLegend(position = "bottomright", pal = pal4, values = dt1,
-       na.label = "Missing", title = "Map Key:")
+       na.label = "Missing", title = paste("Map Key:", m))
      getDat$downMap <- makeMap
      incProgress(0.4, message = "Yay!", detail = "BOOM!")
      return(makeMap)
