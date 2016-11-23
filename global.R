@@ -43,4 +43,5 @@ cropsYield <- c("Barley" = "barley", "Groundnut" = "groundnut", "Maize" = "maize
 #### define collapsable panel titles ####
 panel1 <- "Step 1: choose what you want to visualize"
 panel2 <- "Step 2: set your filters and map it!"
+panel3 <- "Step 3: ward-level drilldowns"
 

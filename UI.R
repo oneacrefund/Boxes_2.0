@@ -1,11 +1,7 @@
 #### BASIC INFO ####
 # boxes server script
-# last edited: 18 nov 2016 (bk)
+# last edited: 23 nov 2016 (bk)
 
-#### other to dos for version 2 ####
-# consider nixing growing seasons and total pop from filters (included for now for simplicity, but is probably tough for users to actually change meaningfully)
-# Explore the usefulness of Archivist (http://www.r-bloggers.com/shiny-archivist-reproducible-interactive-exploration/)
-# selectizeInput() for country/regional borders
 
 #### start ui logic ####
 shinyUI(fluidPage(#theme = "bootstrap.css", 
@@ -28,98 +24,116 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
     bsCollapsePanel(panel1,
      fluidRow(
       column(width = 6,
-       h4(strong("A: SELECT DATA"), align = "center",
-        style = "color:#006400"), tags$hr(),
-       fluidRow(
-        # input data by variable
-        column(width = 6, 
-         h5(strong("All data"), align = "center"), tags$hr(),
-         uiOutput("select_all_data")
-        ),
-        # input data by bundle
-        column(width = 6, 
-         h5(strong("Data bundles"), align = "center"), tags$hr(),
-         checkboxGroupInput(
-          "topical.data", label = em("By topic*"),
-          choices = list(
-           "Core program indicators",
-           "Crop data",
-           "Soil fertility data",
-           "Topography data" 
+       wellPanel(style = "background-color:#f2f6f9",
+        h4(strong("A: SELECT DATA"), align = "center",
+         style = "color:#006400"), tags$hr(),
+        helpText("Hint: Hover over the sub-sections under 'All Data' to get medata",
+         style = "color:firebrick"),
+        fluidRow(
+         # input data by variable
+         column(width = 6, 
+          wellPanel(style = "background-color:#E8E8EE",
+           h5(strong("All data"), align = "center"), tags$hr(),
+           uiOutput("select_all_data")
           )
          ),
-         checkboxGroupInput(
-          "team.data", label = em("By team*"),
-          choices = list(
-           "New Country Expansion",
-           "Frontiers"
+         # input data by bundle
+         column(width = 6, 
+          wellPanel(style = "background-color:#E8E8EE",
+           h5(strong("Data bundles"), align = "center"), tags$hr(),
+           checkboxGroupInput(
+            "topical.data", label = em("By topic"),
+            choices = list(
+             "Core program indicators",
+             "Crop data",
+             "Soil fertility data",
+             "Topography data" 
+            )
+           ),
+           checkboxGroupInput(
+            "team.data", label = em("By team"),
+            choices = list(
+             "New Country Expansion",
+             "Frontiers"
+            )
+           )
+          )#End of data by bundle wellPanel
+         )#End of data by bundle column
+        )
+       )#End of wellPanel inside whole data column
+      ), #End of data column
+      
+      #Column for selecting geography and map type
+      column(width = 6,
+       wellPanel(style = "background-color:#f2f6f9",
+        fluidRow(
+         h4(strong("B: SELECT GEOGRAPHY"), align = "center",
+          style = "color:#006400"), tags$hr(), 
+         # input resolution
+         column(width = 6,
+          wellPanel(style = "background-color:#E8E8EE",
+           selectInput("res", 
+            label = h5(strong("Data resolution")), 
+            choices = paste0(c(5, 10, 20, 30, 40, 
+             seq(50, 80, 5)), "km"), 
+            selected = "10km")
+          )
+         ),
+         # input region for cropping
+         column(width = 6,
+          wellPanel(style = "background-color:#E8E8EE",
+           uiOutput("geoui")
           )
          )
-        )
-       )
-      ), 
-      column(width = 6,
-       h4(strong("B: SELECT GEOGRAPHY"), align = "center",
-        style = "color:#006400"), tags$hr(), 
-       fluidRow(
-        # input resolution
-        column(width = 6,
-         selectInput("res", 
-          label = h5(strong("Data resolution")), 
-          choices = paste0(c(5, 10, 20, 30, 40, 
-           seq(50, 80, 5)), "km"), 
-          selected = "10km")
-        ),
-        # input region for cropping
-        column(width = 6,
-         uiOutput("geoui")
-        )
-       ),
-       
-       #Setting data selection for rain, yieldgap and cropmix
-       fluidRow(
-        column( width = 12,
-        uiOutput("filters_rain1")
-       )
-        ),
-       fluidRow(
-        column(width = 12,
-         style = "background-color:#f2f6f9",
-         uiOutput("yield_choices")
+        ),# End of geography fluidRow
+        #Setting data selection for rain, yieldgap and cropmix
+        fluidRow(
+         column( width = 12,
+          style = "background-color:#f2f6f9",
+          uiOutput("filters_rain1")
          )
-       ), br(), br(),
+        ),
+        fluidRow(
+         column(width = 12,
+          style = "background-color:#f2f6f9",
+          uiOutput("yield_choices")
+         )
+        )
+       ),# End of geography/yieldgap/rain data wellPanel
        
        #Setting map type:
-       fluidRow(
-        h4(strong("C: SET MAP TYPE:"), align = "center",
-         style = "color:#006400"), tags$hr(),
-        column(width = 5,
-         style = "background-color:#f2f6f9",
-         #Section 1: selecting between boxes and districts map:         
-         em("1. First, set your map type by choosing between a boxes map,
+       wellPanel(style = "background-color:#f2f6f9",
+        fluidRow(
+         h4(strong("C: SET MAP TYPE:"), align = "center",
+          style = "color:#006400"), tags$hr(),
+         column(width = 6,
+          wellPanel(style = "background-color:#E8E8EE",
+           #Section 1: selecting between boxes and districts map:         
+           em("1. First, set your map type by choosing between a boxes map,
           and an admin-boundary-based map:"),
-         selectInput("boxes_admin", label = "",
-          choices = c("Boxes Map", "Admin-based Map"), selected = "Boxes Map",
-          multiple = F, width = "100%"),
-         # Section 1 b: UI output for choosing level of detail for admin mapping
-         uiOutput("detail")
-        ),
-        column(width = 1),
-        column(width = 6,
-         fluidRow(
-          style = "background-color:#f2f6f9",
-          #Section 2: selecting between heat map and green binary map:
-          em("2. Now choose between displaying a filtered binary green map for
+           selectInput("boxes_admin", label = "",
+            choices = c("Boxes Map", "Admin-based Map"), selected = "Boxes Map",
+            multiple = F, width = "100%"),
+           # Section 1 b: UI output for choosing level of detail for admin mapping
+           uiOutput("detail")
+          )
+         ),
+         column(width = 6,
+          fluidRow(
+           wellPanel(style = "background-color:#E8E8EE",
+            #Section 2: selecting between heat map and green binary map:
+            em("2. Now choose between displaying a filtered binary green map for
            all your selected datasets, and a filtered heat map for only one
            of your datasets:"),
-          selectInput("map_type", label = "",
-           choices = c("Binary Green Map", "Heat Map"), selected = "Binary Green Map",
-           multiple = F, width = "100%"),
-          #Section 2 a: UI output for choosing a variable for heat map:
-          uiOutput("heatMap_opts")
+            selectInput("map_type", label = "",
+             choices = c("Binary Green Map", "Heat Map"), selected = "Binary Green Map",
+             multiple = F, width = "100%")
+           )
           )
+         )
         )
-       ), tags$hr(),
+       ),tags$hr(),
+       
        
        fluidRow(
         column(width = 12,
@@ -155,19 +169,21 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
         bsCollapsePanel(
          title = h4(strong("SET YOUR FILTERS AND MAP TYPE:"), align = "center", 
           style = "color:#006400"),value = "panel1",
-          fluidRow(
-           style = "background-color:#f2f6f9",
-           #Section 3: all data filters:
-          em("Awesome! As a last (for real) step, please set the filters for your
+         fluidRow(
+          style = "background-color:#f2f6f9",
+          #Section 2 a: UI output for choosing a variable for heat map:
+          uiOutput("heatMap_opts"),
+          #Section 3: all data filters:
+          em("Awesome! As a last step, please set the filters for your
            selected datasets below, and then hit the button just below to
-           generate your map to the right side!"),
+           generate your map to the right side!"), br(), br(),
           # show server-generated filters
           uiOutput("filters_auto"),
           uiOutput("filters_rain2"),
           uiOutput("filters_fert_comp"),
           # uiOutput("filters_pop_type"),
           uiOutput("filters_soil_c"),
-           uiOutput("filters_yieldgap")
+          uiOutput("filters_yieldgap")
          ),#End of fluidRow3
          tags$hr(),
          
@@ -175,33 +191,43 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
           style = "background-color:#f2f6f9",
           #Section 4: uiOutput for the relevant actionButton:
           uiOutput("set_button")
-         )#End of fluidrow4
-        ), #Ene of bsCollapsePanel1
-       
-        #bsCollapsePanel 2: displaying map drill-down options:
-        #Consider generating the entire bsCollapsePanel using renderUI in server
-        bsCollapsePanel(
-         title = h4(strong("ADMIN MAPPING: WARD DRILL-DOWNS"), align = "center", 
-          style = "color:#006400"),value = "panel2",
-         wellPanel(
-          em("Below is a list of wards for drill-down mapping"), br(),
-          em("** Please note that this is not always available, depending on
-           the selected country/region"), br(),
-          uiOutput("drillDown")
-          
-         )# End of wellPanel
-        ) # End of bsCollapsePanel 2
+         ), tags$hr(),#End of fluidrow4
+         fluidRow (
+          style = "background-color:#f2f6f9",
+         uiOutput("data_download")
+         )
+        ) #End of bsCollapsePanel1
        ) #End of bsCollapse
       ),#sidebarPanel ends here
       
       # main panel for map, # of HHs, benchmarks and rainfall data loading alert
       mainPanel(
+       #Benchmark data table
+       wellPanel(
+       fluidRow(
+        style = "background-color:#D3D3D3",
+        h4(strong("Benchmark figures for selected datasets -- if available:"),
+         style = "color:#006400", align = "center")
+       ),
+       fluidRow(
+        style = "background-color:#D3D3D3",
+        DT::dataTableOutput("benchmarks")
+       )
+       ),
+       tags$hr(),
        #Rainfall data loading alert
        bsAlert("loadingRainAlert"),
+       bsAlert("makingMapAlert"),
+       #Separator for benchmark table and map:
+       fluidRow(
+        style = "background-color:#D3D3D3",
+        h4(strong("Your map:"),
+         style = "color:#006400", align = "center")
+       ),
        #Map output
        fluidRow(
         leafletOutput("map", height = 600) 
-       ), tags$hr(),
+       ), tags$hr()
        #Market size (# of HHs) -- WIP
        #        fluidRow(
        #         column(width = 3,
@@ -212,21 +238,20 @@ shinyUI(fluidPage(#theme = "bootstrap.css",
        #          uiOutput("market_size")
        #         )
        #        ), tags$hr(),
-       #Benchmark data table
-       fluidRow(
-        style = "background-color:#D3D3D3",
-        h3(strong("Benchmark figures for selected datasets -- if available:"),
-         style = "color:#006400")
-       ),
-       fluidRow(
-        style = "background-color:#D3D3D3",
-        DT::dataTableOutput("benchmarks")
-       ),
-       tags$hr()
-      )
+       
+      )# End of mainPanel
+      
      )
-    )
-   )
+    )# End of panel 2
+   )# End of main bsCollapse
   )
+ ),# End of big fluidRow
+ 
+ ## UI output for map drilldown: creates a third 'panel' / row where a drilldown
+ #option is available
+ fluidRow(
+  column(width = 12,
+   uiOutput("ddwnUI")
+  )#End of ddwn column
  )
 ))
